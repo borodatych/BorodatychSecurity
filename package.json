@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "Проверка защиты сервера: что открыто наружу и чем это закрыть",
   "type": "module",
-  "private": true,
   "bin": {
     "borodatych-security": "./dist/cli.js"
   },
@@ -25,5 +24,9 @@
     "eslint": "^9.30.0",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.36.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
   }
 }

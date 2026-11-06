@@ -147,6 +147,59 @@ const checks: Record<string, CheckText> = {
   },
 }
 
+/** Колонка «как» из docs/checks.md: сверяется тестом, чтобы справка не расходилась с документом */
+const checksHow: Record<string, string> = {
+  'base.os': '`/etc/os-release` + встроенная таблица сроков поддержки Ubuntu и Debian',
+  'base.autoupdates':
+    'Debian/Ubuntu: пакет и таймер `unattended-upgrades`, `/etc/apt/apt.conf.d/20auto-upgrades`',
+  'base.pending': '`/var/run/reboot-required`, число security-обновлений (`apt-get -s upgrade`)',
+  'base.livepatch': '`pro status`',
+  'ssh.auth': '`sshd -T` (или конфиг)',
+  'net.listen': '`ss -ltnup`',
+  'net.docker-bypass': '`docker ps` с портами `0.0.0.0:` + включён ли UFW',
+  'net.firewall': 'ufw/nftables/iptables',
+  'net.npm-admin': 'контейнер NPM и порт 81',
+  'docker.root': '`docker inspect` User, Privileged, CapAdd, SecurityOpt',
+  'docker.sock': '`docker inspect` Mounts',
+  'docker.mounts': 'Mounts',
+  'systemd.sandbox': '`systemd-analyze security` для служб, которые слушают порты',
+  'runtime.eol': 'версии `node`, `bun`, `php`, `python3`, PostgreSQL, образы в `docker ps`',
+  'f2b.active': '`fail2ban-client status`',
+  'f2b.docker': 'при Docker: `banaction` и цепочка DOCKER-USER',
+  crowdsec: '`cscli` версии, `cscli bouncers list`, `cscli capi status`',
+  'web.secrets':
+    'GET `/.env`, `/.git/config`, `/.git/HEAD`, `/config.json`, `/.DS_Store`, `/backup.sql`, `/server-status`, `/phpinfo.php`',
+  'web.sourcemaps': 'ссылки `sourceMappingURL` в JS главной и GET на них',
+  'web.headers': 'ответ главной',
+  'web.tls': 'TLS-рукопожатие',
+  'web.cors': 'OPTIONS и GET с чужим Origin',
+  'web.cookies': 'Set-Cookie главной',
+  'web.ratelimit': '30 быстрых запросов к главной',
+  'web.banner': '`Server`, `X-Powered-By`',
+  'ops.backup': 'таймеры и cron с `pg_dump`, `restic`, `borg`, `rclone`; куда пишут',
+  'ops.monitor': 'не проверить изнутри — всегда `unknown` с подсказкой',
+}
+
+const mcp = {
+  unknownCheck: (id: string, known: string): string =>
+    `неизвестная проверка: ${id}. Известные: ${known}`,
+  auditFailed: (message: string): string => `проверка не выполнена: ${message}`,
+  invalidDomain: (reason: string): string => `домен не принят: ${reason}`,
+  domainEmpty: 'пустая строка',
+  domainTooLong: 'длиннее 253 символов',
+  domainSpace: 'есть пробелы',
+  domainScheme: 'указана схема, нужно только имя хоста',
+  domainPath: 'указан путь, параметры или якорь, нужно только имя хоста',
+  domainPort: 'указан порт или IPv6, нужно только имя хоста',
+  domainIp: 'IP-адреса запрещены, нужен домен',
+  domainFormat: 'не похоже на имя хоста',
+  invalidList: (name: string): string => `${name}: ожидается массив непустых строк`,
+  invalidBoolean: (name: string): string => `${name}: ожидается true или false`,
+  invalidId: 'id: ожидается непустая строка',
+  invalidArgument: (name: string): string => `${name}: неожиданный тип аргумента`,
+  noArgs: 'подкоманда mcp не принимает аргументов',
+}
+
 const statusLabels: Record<string, string> = {
   ok: 'ок',
   warn: 'стоит поправить',
@@ -196,6 +249,7 @@ const report = {
     '  --only id,id        выполнить только эти проверки',
     '  --skip id,id        пропустить эти проверки',
     '  --domain <host>     домен для проверок сайта снаружи (раздел 5)',
+    '  mcp                 MCP-сервер по stdio для агентов (только чтение)',
     '  --help, -h          эта справка',
     '  --version, -v       версия',
     '',
@@ -331,7 +385,9 @@ export const ru = {
   report,
   facts,
   checks,
+  how: checksHow,
   fixes,
+  mcp,
 }
 
 export type Ru = typeof ru

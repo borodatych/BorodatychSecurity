@@ -1,15 +1,33 @@
-import { hostname } from 'node:os'
 import { CliError, parseCliArgs } from './args'
-import { createCtx } from './exec'
+import { audit } from './audit'
 import { ru } from './i18n/ru'
+import { runMcpServer } from './mcp'
 import { checks as registry } from './registry'
-import { buildJsonReport, exitCodeFor } from './report/json'
+import { exitCodeFor } from './report/json'
 import { renderText } from './report/text'
-import { runChecks, selectChecks } from './run'
+import { selectChecks } from './run'
 import { VERSION } from './version'
 
-/** Точка входа CLI; отдельно от bin, чтобы MCP мог импортировать main позже */
-export async function main(argv: readonly string[]): Promise<number> {
+/**
+ * Точка входа CLI; отдельно от bin, чтобы MCP мог импортировать main.
+ * null — процесс оставлен MCP-серверу на stdio (завершится, когда закроется stdin)
+ */
+export async function main(argv: readonly string[]): Promise<number | null> {
+  if (argv[0] === 'mcp') {
+    if (argv.length > 1) {
+      process.stderr.write(`${ru.report.error(ru.mcp.noArgs)}\n${ru.report.hint}\n`)
+      return 2
+    }
+    try {
+      await runMcpServer()
+      return null
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      process.stderr.write(`${ru.report.error(message)}\n`)
+      return 2
+    }
+  }
+
   let options
   try {
     options = parseCliArgs(argv)
@@ -30,10 +48,10 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   try {
     const selected = selectChecks(registry, options)
-    const ctx = createCtx(options.domain === undefined ? {} : { domain: options.domain })
-    const startedAt = ctx.now.toISOString()
-    const results = await runChecks(ctx, selected)
-    const report = buildJsonReport(VERSION, hostname(), startedAt, results)
+    const report = await audit(
+      selected,
+      options.domain === undefined ? {} : { domain: options.domain },
+    )
 
     if (options.json) {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
@@ -41,7 +59,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       const color = process.stdout.isTTY && process.env.NO_COLOR === undefined
       process.stdout.write(`${renderText(report, { color })}\n`)
     }
-    return exitCodeFor(results)
+    return exitCodeFor(report.checks)
   } catch (error) {
     if (error instanceof CliError) {
       process.stderr.write(`${ru.report.error(error.message)}\n${ru.report.hint}\n`)
