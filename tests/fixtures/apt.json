@@ -1,0 +1,5 @@
+{
+  "simulate": "NOTE: This is only a simulation!\nReading package lists...\nBuilding dependency tree...\nReading state information...\nCalculating upgrade...\nThe following packages will be upgraded:\n  libssl3 openssh-server tzdata\n3 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\nInst libssl3 [3.0.2-0ubuntu1.10] (3.0.2-0ubuntu1.15 Ubuntu:22.04/jammy-security [amd64])\nInst openssh-server [1:8.9p1-3ubuntu0.4] (1:8.9p1-3ubuntu0.6 Ubuntu:22.04/jammy-security [amd64])\nInst tzdata [2024a-0ubuntu0.22.04] (2024b-0ubuntu0.22.04 Ubuntu:22.04/jammy-updates [all])\n",
+  "autoUpgradesOn": "APT::Periodic::Update-Package-Lists \"1\";\nAPT::Periodic::Unattended-Upgrade \"1\";\n",
+  "autoUpgradesOff": "APT::Periodic::Update-Package-Lists \"0\";\nAPT::Periodic::Unattended-Upgrade \"0\";\n"
+}

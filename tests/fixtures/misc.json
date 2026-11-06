@@ -1,0 +1,17 @@
+{
+  "proStatus": "SERVICE          ENTITLED  STATUS    DESCRIPTION\nesm-apps         yes       enabled   Expanded Security Maintenance for Applications\nesm-infra        yes       enabled   Expanded Security Maintenance for Infrastructure\nlivepatch        yes       enabled   Canonical Livepatch service\n",
+  "proNotAttached": "This machine is not attached to an Ubuntu Pro subscription.\nSee https://ubuntu.com/pro\n",
+  "ufwActive": "Status: active\nLogging: on (low)\nDefault: deny (incoming), allow (outgoing), disabled (routed)\nNew profiles: skip\n\nTo                         Action      From\n--                         ------      ----\n22/tcp                     ALLOW IN    Anywhere\n443/tcp                    ALLOW IN    Anywhere\n",
+  "ufwInactive": "Status: inactive\n",
+  "iptables": "-P INPUT ACCEPT\n-P FORWARD DROP\n-P OUTPUT ACCEPT\n-A INPUT -i lo -j ACCEPT\n-A INPUT -p tcp --dport 22 -j ACCEPT\n",
+  "iptablesEmpty": "-P INPUT ACCEPT\n-P FORWARD ACCEPT\n-P OUTPUT ACCEPT\n",
+  "nftRules": "table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t}\n}\n",
+  "cscliBouncers": "╭──────────────────┬─────────────┬───────┬──────────────────────────┬─────────╮\n│ Name             │ IP Address  │ Valid │ Last API pull            │ Version │\n├──────────────────┼─────────────┼───────┼──────────────────────────┼─────────┤\n│ cs-firewall-bouncer │ 127.0.0.1 │ ✔     │ 2026-11-06T10:00:00Z     │ v0.0.30 │\n╰──────────────────┴─────────────┴───────┴──────────────────────────┴─────────╯\n",
+  "cscliNoBouncers": "No bouncers registered\n",
+  "cscliCapiOn": "CAPI is enabled\n",
+  "cscliCapiOff": "CAPI is not registered\n",
+  "backupConfig": "# m h dom mon dow command\n0 3 * * * /usr/bin/pg_dump app | gzip > /var/backups/app.sql.gz\n15 3 * * * rclone sync /srv/app remote:backup/app\n",
+  "backupLocalOnly": "0 3 * * * /usr/bin/restic backup /srv/app --repo /var/backups/restic\n",
+  "backupNone": "0 1 * * * /usr/bin/apt-get update\n",
+  "fakeSecretEnv": "AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE\nDATABASE_URL=postgres://app:s3cr3t@db.internal/app\n"
+}

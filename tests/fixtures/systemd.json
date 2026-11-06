@@ -1,0 +1,5 @@
+{
+  "analyzeSecurity": "→ Overall exposure level for ssh.service: 9.6 UNSAFE 😨\n→ Overall exposure level for caddy.service: 6.2 MEDIUM 😐\n→ Overall exposure level for postgresql.service: 8.1 UNSAFE\n→ Overall exposure level for cron.service: 7.0 MEDIUM\n",
+  "table": "NAME                EXPOSURE\nssh.service         9.6 UNSAFE\ncaddy.service       6.2 MEDIUM\npostgresql.service  8.1 UNSAFE\n",
+  "timers": "NEXT                        LEFT       LAST                        PASSED    UNIT                         ACTIVATES\nFri 2026-11-07 03:00:00 UTC 6h left    Thu 2026-11-06 03:00:00 UTC 14h ago   backup.timer                 backup.service\n"
+}

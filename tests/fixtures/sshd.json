@@ -1,0 +1,4 @@
+{
+  "withPasswords": "port 22\naddressfamily any\nlistenaddress 0.0.0.0:22\nlistenaddress [::]:22\nusepam yes\nlogingracetime 120\nx11displayoffset 10\nmaxauthtries 6\nmaxsessions 10\npubkeyauthentication yes\npasswordauthentication yes\nkbdinteractiveauthentication yes\npermitrootlogin yes\nusedns no\nallowtcpforwarding yes\npermitemptypasswords no\n",
+  "keysOnly": "port 22\naddressfamily any\nlistenaddress 0.0.0.0:22\nlistenaddress [::]:22\nusepam yes\nlogingracetime 120\nmaxauthtries 6\nmaxsessions 10\npubkeyauthentication yes\npasswordauthentication no\nkbdinteractiveauthentication no\npermitrootlogin prohibit-password\nusedns no\nallowtcpforwarding no\npermitemptypasswords no\n"
+}

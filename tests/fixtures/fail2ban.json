@@ -1,0 +1,7 @@
+{
+  "status": "Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, nginx-http-auth\n",
+  "statusSshd": "Status for the jail: sshd\n|- Filter\n|  |- Currently failed:\t0\n|  |- Total failed:\t17\n|  `- Journal matches:\t_SYSTEMD_UNIT=sshd.service + _COMM=sshd\n`- Actions\n   |- Currently banned:\t1\n   |- Total banned:\t4\n   `- Banned IP list:\t203.0.113.7\n",
+  "statusNoSshd": "Status\n|- Number of jail:\t1\n`- Jail list:\tnginx-http-auth\n",
+  "jailLocal": "[sshd]\nenabled = true\nbanaction = iptables-multiport\n",
+  "jailDockerUser": "[sshd]\nenabled = true\nbanaction = iptables-multiport\nchain = DOCKER-USER\n"
+}

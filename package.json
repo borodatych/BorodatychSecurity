@@ -1,0 +1,29 @@
+{
+  "name": "@borodatych/security",
+  "version": "0.1.0",
+  "description": "Проверка защиты сервера: что открыто наружу и чем это закрыть",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "borodatych-security": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "tsc --noEmit && eslint .",
+    "test": "bun test",
+    "build": "bun build src/cli.ts --target node --outfile dist/cli.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "@types/bun": "^1.2.0",
+    "@types/node": "^20.19.0",
+    "eslint": "^9.30.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.36.0"
+  }
+}
