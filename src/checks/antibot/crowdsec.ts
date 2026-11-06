@@ -38,6 +38,12 @@ export const crowdsec: Check = {
     if (statuses.length === 0) statuses.push('ok')
 
     const status = statuses.includes('fail') ? 'fail' : statuses.includes('unknown') ? 'unknown' : 'ok'
-    return { status, findings, fix: 'crowdsec' }
+    // База — low; сломанный CrowdSec поднимает важность до high.
+    return {
+      status,
+      findings,
+      severity: status === 'fail' ? 'high' : 'low',
+      fix: 'crowdsec',
+    }
   },
 }

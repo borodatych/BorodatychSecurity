@@ -1,0 +1,44 @@
+{
+  "html": "<!doctype html><html><head><title>app</title><script src=\"/assets/app.js\"></script><script src=\"https://cdn.example.net/vendor.js\"></script></head><body>app</body></html>",
+  "spa": "<!doctype html><html><body>app shell</body></html>",
+  "js": "console.log('app')\n//# sourceMappingURL=app.js.map\n",
+  "sourceMap": "{\"version\":3,\"sources\":[\"app.ts\"],\"names\":[],\"mappings\":\"AAAA\"}",
+  "secureHeaders": {
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "no-referrer",
+    "content-security-policy": "default-src 'self'; frame-ancestors 'none'"
+  },
+  "weakHeaders": {
+    "content-type": "text/html; charset=utf-8"
+  },
+  "corsDanger": {
+    "access-control-allow-origin": "https://borodatych-security.invalid",
+    "access-control-allow-credentials": "true"
+  },
+  "corsWildcard": {
+    "access-control-allow-origin": "*"
+  },
+  "corsWildcardCredentials": {
+    "access-control-allow-origin": "*",
+    "access-control-allow-credentials": "true"
+  },
+  "setCookies": [
+    "sessionid=abc; Path=/; Secure; HttpOnly; SameSite=Lax",
+    "token=xyz; Path=/; Secure; HttpOnly; SameSite=None",
+    "theme=dark; Path=/; Secure; HttpOnly; SameSite=Lax"
+  ],
+  "badCookies": [
+    "sessionid=abc; Path=/",
+    "theme=dark; Path=/; Secure; HttpOnly; SameSite=Lax"
+  ],
+  "secretEnv": "APP_KEY=base64:abcdef\nDB_PASSWORD=hunter2\n",
+  "secretGitConfig": "[core]\n\trepositoryformatversion = 0\n",
+  "secretGitHead": "ref: refs/heads/main\n",
+  "secretConfig": "{\"apiUrl\":\"https://api.example.ru\",\"debug\":false}\n",
+  "secretBackup": "-- MySQL dump 10.13\nCREATE TABLE users (id int);\n",
+  "secretServerStatus": "Apache Server Status for example.ru\nServer Version: Apache/2.4.62\n",
+  "secretPhpinfo": "<html><head><title>phpinfo()</title></head><body></body></html>\n",
+  "notFound": "<!doctype html><html><body>404 not found</body></html>"
+}

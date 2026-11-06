@@ -38,7 +38,7 @@ export async function runChecks(ctx: Ctx, selected: readonly Check[]): Promise<C
       reports.push({
         id: check.id,
         section: check.section,
-        severity: check.severity,
+        severity: result.severity ?? check.severity,
         status: result.status,
         findings: result.findings.map(redactSecrets),
         fix: result.fix,

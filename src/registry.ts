@@ -17,9 +17,17 @@ import { netListen } from './checks/net/listen'
 import { netNpmAdmin } from './checks/net/npm-admin'
 import { opsBackup } from './checks/ops/backup'
 import { opsMonitor } from './checks/ops/monitor'
+import { webBanner } from './checks/web/banner'
+import { webCookies } from './checks/web/cookies'
+import { webCors } from './checks/web/cors'
+import { webHeaders } from './checks/web/headers'
+import { webRatelimit } from './checks/web/ratelimit'
+import { webSecrets } from './checks/web/secrets'
+import { webSourcemaps } from './checks/web/sourcemaps'
+import { webTls } from './checks/web/tls'
 import type { Check } from './types'
 
-/** Все проверки разделов 1–4 и 6; раздел 5 и MCP появятся отдельной задачей */
+/** Все проверки разделов 1–6; раздел 5 работает только с --domain */
 export const checks: Check[] = [
   baseOs,
   baseAutoupdates,
@@ -38,6 +46,14 @@ export const checks: Check[] = [
   f2bActive,
   f2bDocker,
   crowdsec,
+  webSecrets,
+  webSourcemaps,
+  webHeaders,
+  webTls,
+  webCors,
+  webCookies,
+  webRatelimit,
+  webBanner,
   opsBackup,
   opsMonitor,
 ]

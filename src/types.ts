@@ -9,10 +9,12 @@ export interface CheckResult {
   status: Status
   findings: string[]
   fix: string
+  /** Итоговая важность, если находка подняла базовую важность проверки */
+  severity?: Severity
 }
 
 export interface Ctx {
-  /** Домен для проверок сайта снаружи (раздел 5), пока только сохраняется */
+  /** Домен для проверок сайта снаружи (раздел 5) */
   domain?: string
   platform: NodeJS.Platform
   now: Date

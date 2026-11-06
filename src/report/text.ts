@@ -46,11 +46,15 @@ function checkTitle(check: CheckReport): string {
 function renderCheck(check: CheckReport, color: boolean, lines: string[]): void {
   lines.push(`  ${label(check.status, color)} ${check.id} — ${checkTitle(check)}`)
   for (const finding of check.findings) lines.push(`    ${ru.report.finding(finding)}`)
-  if (check.status !== 'ok') {
-    const problem = ru.checks[check.id]?.problem
-    if (problem !== undefined) lines.push(`    ${ru.report.problemLabel(problem)}`)
+  if (check.status === 'ok' || check.status === 'skip') return
+  if (check.status === 'unknown') {
+    // без прав проверка неполная: только подсказка, без «что значит»
     lines.push(`    ${ru.report.fixLabel(check.fix)}`)
+    return
   }
+  const problem = ru.checks[check.id]?.problem
+  if (problem !== undefined) lines.push(`    ${ru.report.problemLabel(problem)}`)
+  lines.push(`    ${ru.report.fixLabel(check.fix)}`)
 }
 
 /** Текстовый отчёт: сводка, худшие, затем группы по разделам */

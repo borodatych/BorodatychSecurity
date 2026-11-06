@@ -71,6 +71,28 @@ describe('JSON-отчёт и код выхода', () => {
     expect(text).toContain('Чем чинить: выключить пароли')
     expect(text).not.toContain('\u001b[')
   })
+
+  test('ok и skip: только findings, без «что значит» и «чем чинить»', () => {
+    const okSample = SAMPLE[1]
+    if (okSample === undefined) throw new Error('нет образца ok')
+    for (const status of ['ok', 'skip'] as const) {
+      const only = buildJsonReport('0.1.0', 'host', '2026-11-06T00:00:00.000Z', [
+        { ...okSample, status },
+      ])
+      const text = renderText(only, { color: false })
+      expect(text).not.toContain('Что значит')
+      expect(text).not.toContain('Чем чинить')
+    }
+  })
+
+  test('unknown: только подсказка, без «что значит»', () => {
+    const unknownSample = SAMPLE[2]
+    if (unknownSample === undefined) throw new Error('нет образца unknown')
+    const only = buildJsonReport('0.1.0', 'host', '2026-11-06T00:00:00.000Z', [unknownSample])
+    const text = renderText(only, { color: false })
+    expect(text).not.toContain('Что значит')
+    expect(text).toContain('Чем чинить: поставить Uptime Kuma')
+  })
 })
 
 describe('аргументы', () => {

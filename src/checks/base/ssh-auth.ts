@@ -1,7 +1,68 @@
 import { ru } from '../../i18n/ru'
-import { parseSshdConfig, sshPolicy } from '../../parsers/system'
-import type { Check } from '../../types'
+import { parseSshdConfig, sshPolicy, type SshPolicy } from '../../parsers/system'
+import type { Check, CheckResult } from '../../types'
 import { isLinux, skipped, unavailable } from '../shared'
+
+const ROOT_KEY_ONLY = new Set(['prohibit-password', 'without-password', 'forced-commands-only'])
+
+/**
+ * Правила ssh.auth:
+ * fail — разрешены пароли или keyboard-interactive;
+ * warn — root по ключу (`permitrootlogin yes` при выключенных паролях) или
+ *        настройка паролей не найдена;
+ * ok — root запрещён (`no`) или только по ключу (`prohibit-password`).
+ */
+export function evaluateSshPolicy(policy: SshPolicy): CheckResult {
+  const findings: string[] = []
+  let status: CheckResult['status'] = 'ok'
+  const passwords = policy.passwordAuthentication
+  const kbd = policy.kbdInteractiveAuthentication
+  const root = (policy.permitRootLogin ?? '').toLowerCase()
+
+  if (passwords === true) {
+    findings.push(ru.facts.setting('passwordauthentication', 'yes'))
+    status = 'fail'
+  } else if (passwords === false) {
+    findings.push(ru.facts.setting('passwordauthentication', 'no'))
+  } else {
+    findings.push(ru.facts.setting('passwordauthentication', 'не найден, по умолчанию обычно yes'))
+    status = 'warn'
+  }
+
+  if (kbd === true) {
+    findings.push(ru.facts.setting('kbdinteractiveauthentication', 'yes'))
+    status = 'fail'
+  } else if (kbd === false) {
+    findings.push(ru.facts.setting('kbdinteractiveauthentication', 'no'))
+  }
+
+  if (root === 'yes') {
+    findings.push(ru.facts.setting('permitrootlogin', 'yes'))
+    // Пароли выключены: root только по ключу — не дыра, но и не идеал.
+    if (status === 'ok') status = 'warn'
+  } else if (root === 'no') {
+    findings.push(ru.facts.setting('permitrootlogin', 'no'))
+  } else if (ROOT_KEY_ONLY.has(root)) {
+    findings.push(ru.facts.setting('permitrootlogin', policy.permitRootLogin ?? root))
+  } else if (root.length === 0) {
+    findings.push(ru.facts.setting('permitrootlogin', 'prohibit-password (по умолчанию)'))
+  }
+
+  if (policy.pubkeyAuthentication === false) {
+    findings.push(ru.facts.setting('pubkeyauthentication', 'no'))
+    if (status === 'ok') status = 'warn'
+  }
+
+  if (
+    passwords === null &&
+    kbd === null &&
+    policy.permitRootLogin === null &&
+    policy.pubkeyAuthentication === null
+  ) {
+    return { status: 'unknown', findings: [ru.facts.noConfig()], fix: 'common.sudo' }
+  }
+  return { status, findings, fix: 'ssh.auth' }
+}
 
 export const sshAuth: Check = {
   id: 'ssh.auth',
@@ -19,57 +80,6 @@ export const sshAuth: Check = {
       if (configText === null) return unavailable('sshd -T', result)
     }
 
-    const record = parseSshdConfig(configText)
-    const policy = sshPolicy(record)
-    const findings: string[] = []
-    let bad = false
-    let warn = false
-    let known = false
-
-    if (policy.passwordAuthentication === true) {
-      findings.push(ru.facts.setting('passwordauthentication', 'yes'))
-      bad = true
-      known = true
-    } else if (policy.passwordAuthentication === false) {
-      known = true
-    } else {
-      findings.push(ru.facts.setting('passwordauthentication', 'не найден, по умолчанию обычно yes'))
-      warn = true
-    }
-
-    if ((policy.permitRootLogin ?? '').toLowerCase() === 'yes') {
-      findings.push(ru.facts.setting('permitrootlogin', 'yes'))
-      bad = true
-      known = true
-    } else if (policy.permitRootLogin !== null) {
-      findings.push(ru.facts.setting('permitrootlogin', policy.permitRootLogin))
-      known = true
-    }
-
-    if (policy.kbdInteractiveAuthentication === true) {
-      findings.push(ru.facts.setting('kbdinteractiveauthentication', 'yes'))
-      bad = true
-      known = true
-    } else if (policy.kbdInteractiveAuthentication === false) {
-      known = true
-    }
-
-    if (policy.pubkeyAuthentication === false) {
-      findings.push(ru.facts.setting('pubkeyauthentication', 'no'))
-      warn = true
-    }
-
-    if (!known && findings.length === 0) {
-      return { status: 'unknown', findings: [ru.facts.noConfig()], fix: 'common.sudo' }
-    }
-    if (findings.length === 0) {
-      findings.push(ru.facts.setting('passwordauthentication', 'no'))
-      findings.push(
-        ru.facts.setting('permitrootlogin', policy.permitRootLogin ?? 'prohibit-password'),
-      )
-    }
-
-    const status = bad ? 'fail' : warn ? 'warn' : 'ok'
-    return { status, findings, fix: 'ssh.auth' }
+    return evaluateSshPolicy(sshPolicy(parseSshdConfig(configText)))
   },
 }

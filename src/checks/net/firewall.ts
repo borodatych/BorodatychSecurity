@@ -1,7 +1,9 @@
+import { ALLOWED_PUBLIC_PORTS } from '../../data/ports'
 import { ru } from '../../i18n/ru'
-import { parseIptablesPolicy, parseUfwStatus } from '../../parsers/system'
+import { isWildcardAddress, parseIptablesPolicy, parseUfwStatus } from '../../parsers/system'
 import type { Check, Status } from '../../types'
 import { isLinux, skipped, unavailable, worstStatus } from '../shared'
+import { loadSsListen } from './ss-listen'
 
 export const netFirewall: Check = {
   id: 'net.firewall',
@@ -31,14 +33,13 @@ export const netFirewall: Check = {
       findings.push(ru.facts.nftRules())
       return { status: 'ok', findings, fix: 'net.firewall' }
     }
-    const nftMissing = !nft.ok && nft.reason === 'missing'
-    if (!nft.ok && nft.reason === 'denied') {
+    const nftDenied = !nft.ok && nft.reason === 'denied'
+    if (nftDenied) {
       findings.push(ru.facts.permissionDenied('nft list ruleset'))
       statuses.push('unknown')
     }
 
     const iptables = await ctx.run('iptables', ['-S'])
-    const iptablesMissing = !iptables.ok && iptables.reason === 'missing'
     if (iptables.ok) {
       const state = parseIptablesPolicy(iptables.stdout)
       findings.push(ru.facts.iptablesRules(state.rules))
@@ -48,21 +49,29 @@ export const netFirewall: Check = {
       const inputPolicy = state.policies.INPUT ?? ''
       if (state.rules > 0 || inputPolicy === 'DROP' || inputPolicy === 'REJECT') {
         statuses.push('ok')
-      } else {
-        statuses.push('fail')
+        return { status: worstStatus(statuses), findings, fix: 'net.firewall' }
       }
-      return { status: worstStatus(statuses), findings, fix: 'net.firewall' }
-    }
-
-    if (iptables.reason === 'denied') {
+    } else if (iptables.reason === 'denied') {
       findings.push(ru.facts.permissionDenied('iptables -S'))
-      statuses.push('unknown')
       return { status: 'unknown', findings, fix: 'common.sudo' }
     }
 
-    if (ufwMissing && nftMissing && iptablesMissing) {
-      return { status: 'fail', findings: [ru.facts.noFirewall()], fix: 'net.firewall' }
+    // Сетевого экрана нет. Второй слой нужен, но fail — только если наружу
+    // торчит что-то кроме 22/80/443. Разбор ss общий с net.listen.
+    const loaded = await loadSsListen(ctx)
+    if (!loaded.ok) return unavailable('ss -ltnup', loaded.result)
+    const exposed = loaded.entries.filter(
+      (entry) => isWildcardAddress(entry.address) && !ALLOWED_PUBLIC_PORTS.has(entry.port),
+    )
+    findings.push(ru.facts.noFirewall())
+    if (exposed.length === 0) {
+      findings.push(ru.facts.firewallOnlyAllowed())
+      statuses.push('warn')
+    } else {
+      findings.push(...exposed.map((entry) => ru.facts.listening(entry.address, entry.port, entry.process)))
+      statuses.push('fail')
     }
-    return { status: 'unknown', findings, fix: 'common.sudo' }
+    if (nftDenied) statuses.push('unknown')
+    return { status: worstStatus(statuses), findings, fix: 'net.firewall' }
   },
 }

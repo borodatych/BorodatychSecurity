@@ -41,19 +41,18 @@ const SECTION_5_EXPECTED = [
 
 describe('registry и docs/checks.md', () => {
   const rows = readDocRows()
-  const implemented = rows.filter((row) => row.section !== 5)
   const section5 = rows.filter((row) => row.section === 5)
 
-  test('id в registry равны таблицам разделов 1–4 и 6', () => {
+  test('id в registry равны всем таблицам разделов 1–6', () => {
     const registryIds = checks.map((check) => check.id).sort()
-    const docIds = implemented.map((row) => row.id).sort()
+    const docIds = rows.map((row) => row.id).sort()
     expect(registryIds).toEqual(docIds)
   })
 
-  test('раздел 5 пока не реализован, список отсутствующих явный', () => {
+  test('раздел 5 реализован полным списком', () => {
     expect(section5.map((row) => row.id).sort()).toEqual([...SECTION_5_EXPECTED].sort())
     const registryIds = new Set(checks.map((check) => check.id))
-    for (const id of SECTION_5_EXPECTED) expect(registryIds.has(id)).toBe(false)
+    for (const id of SECTION_5_EXPECTED) expect(registryIds.has(id)).toBe(true)
   })
 
   test('нет дублей, разделы совпадают с документом', () => {

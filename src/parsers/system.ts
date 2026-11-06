@@ -57,6 +57,7 @@ export interface ListenEntry {
   address: string
   port: number
   process: string | null
+  pid: number | null
 }
 
 /** Разбор `ss -ltnup` */
@@ -79,11 +80,13 @@ export function parseSsListen(text: string): ListenEntry[] {
       .replace(/\]$/, '')
       .replace(/%\S+$/, '')
     const processMatch = /users:\(\("([^"]+)"/.exec(line)
+    const pidMatch = /\bpid=(\d+)/.exec(line)
     entries.push({
       proto: tokens[0] === 'udp' ? 'udp' : 'tcp',
       address,
       port,
       process: processMatch?.[1] ?? null,
+      pid: pidMatch === null ? null : Number(pidMatch[1]),
     })
   }
   return entries
@@ -280,4 +283,143 @@ export function parseBackupConfig(text: string): BackupJob[] {
     jobs.push({ command, remote: REMOTE_RE.test(line) })
   }
   return jobs
+}
+
+const BACKUP_RE = /\b(?:backup|dump|restic|borg|rclone|pg_dump|rsync)\b/i
+
+/** Имя таймера, юнита или команда похожа на бэкап */
+export function isBackupText(text: string): boolean {
+  return BACKUP_RE.test(text)
+}
+
+export type BackupTarget = 'remote' | 'local' | 'unknown'
+
+function remoteRepoSpec(value: string): boolean {
+  return /^(?:s3:|b2:|gcs:|gs:|azure:|sftp:|ssh:|rest:|rclone:|swift:|http:\/\/|https:\/\/)/i.test(
+    value,
+  ) || /^(?:[^/\s]+@)?[^/\s:]+:/.test(value)
+}
+
+function lastArgument(tokens: readonly string[]): string | null {
+  for (let index = tokens.length - 1; index >= 0; index -= 1) {
+    const token = tokens[index]
+    if (token !== undefined && !token.startsWith('-')) return token
+  }
+  return null
+}
+
+/**
+ * Куда пишет команда бэкапа: наружу, только локально или непонятно.
+ * Секреты в команду не попадают — вызывающий обязан их вырезать.
+ */
+export function classifyBackupCommand(command: string): BackupTarget {
+  const line = command.trim()
+  if (line.length === 0) return 'unknown'
+  if (/\bgit\s+push\b/i.test(line)) return 'remote'
+  if (/\b(?:aws\s+s3|s3cmd|mc\s+(?:cp|mirror)|gsutil|az\s+storage)\b/i.test(line)) {
+    return 'remote'
+  }
+  if (/\bscp\b/i.test(line) && /@|:/.test(line)) return 'remote'
+
+  if (/\brclone\b/i.test(line)) {
+    const tokens = line.split(/\s+/)
+    const remote = tokens.find((token) => /^[A-Za-z0-9_.-]+:/.test(token) && !token.startsWith('/'))
+    if (remote !== undefined) return 'remote'
+    return lastArgument(tokens.slice(tokens.findIndex((token) => /rclone/i.test(token)))) === null
+      ? 'unknown'
+      : 'local'
+  }
+
+  if (/\brestic\b/i.test(line)) {
+    const repo = /(?:--repo(?:=|\s+)|-r\s+)(\S+)/.exec(line)?.[1]
+    if (repo === undefined) return 'unknown'
+    if (remoteRepoSpec(repo)) return 'remote'
+    if (/^(?:\/|\.\/|~)/.test(repo)) return 'local'
+    return 'unknown'
+  }
+
+  if (/\bborg\b/i.test(line)) {
+    if (/ssh:\/\/|@[^/\s:]+:/.test(line)) return 'remote'
+    if (/(?:^|\s)(?:\/|\.\/|~)\S+/.test(line)) return 'local'
+    return 'unknown'
+  }
+
+  if (/\brsync\b/i.test(line)) {
+    const tokens = line.split(/\s+/)
+    const destination = lastArgument(tokens)
+    if (destination === null) return 'unknown'
+    if (remoteRepoSpec(destination) || /@[^/\s:]+:/.test(destination)) return 'remote'
+    if (/^(?:\/|\.\/|~)/.test(destination)) return 'local'
+    return 'unknown'
+  }
+
+  if (/\bpg_dump\b/i.test(line)) {
+    if (/\|\s*(?:ssh|rclone|rsync|s3cmd|aws|gsutil|scp|git)\b/i.test(line)) return 'remote'
+    return 'local'
+  }
+
+  if (/\b(?:backup|dump)\b/i.test(line)) {
+    if (/>\s*\S+/.test(line) || /--(?:file|output|repo)\b/.test(line)) return 'local'
+    return 'unknown'
+  }
+
+  return 'unknown'
+}
+
+export interface SystemdTimer {
+  unit: string
+  activates: string[]
+}
+
+/** Разбор `systemctl list-timers --all --no-pager` */
+export function parseSystemdTimers(text: string): SystemdTimer[] {
+  const timers: SystemdTimer[] = []
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (line.length === 0 || /^NEXT\s/.test(line)) continue
+    const tokens = line.split(/\s+/)
+    const index = tokens.findIndex((token) => token.endsWith('.timer'))
+    if (index < 0) continue
+    const unit = tokens[index]
+    if (unit === undefined) continue
+    const activates = tokens
+      .slice(index + 1)
+      .filter((token) => /\.(?:service|socket|target)$/.test(token))
+    timers.push({ unit, activates })
+  }
+  return timers
+}
+
+/** Команды ExecStart из `systemctl cat` */
+export function parseExecStart(text: string): string[] {
+  const commands: string[] = []
+  for (const raw of text.split(/\r?\n/)) {
+    const match = /^\s*ExecStart\s*=\s*(.+)$/.exec(raw)
+    if (match === null) continue
+    const command = (match[1] ?? '').trim().replace(/^[-@+!:]+/, '')
+    if (command.length > 0 && !commands.includes(command)) commands.push(command)
+  }
+  return commands
+}
+
+/** Unit= из `systemctl cat <timer>` */
+export function parseTimerUnit(text: string): string | null {
+  return /^\s*Unit\s*=\s*(\S+)/m.exec(text)?.[1] ?? null
+}
+
+/** Имя юнита из содержимого /proc/<pid>/cgroup */
+export function unitFromCgroup(text: string): string | null {
+  for (const raw of text.split(/\r?\n/)) {
+    const match = /\/([^/]+\.(?:service|socket|scope|timer))\s*$/.exec(raw.trim())
+    if (match !== null) return match[1] ?? null
+  }
+  return null
+}
+
+/** Имя юнита из вывода `systemctl status <pid>` */
+export function unitFromStatus(text: string): string | null {
+  const first = /^\s*[●•*]\s+(\S+\.(?:service|socket|scope|timer))/m.exec(text)
+  if (first !== null) return first[1] ?? null
+  const loaded = /^\s*Loaded:.*?\/([^/\s]+\.(?:service|socket|scope|timer))/m.exec(text)
+  return loaded !== null ? (loaded[1] ?? null) : null
 }

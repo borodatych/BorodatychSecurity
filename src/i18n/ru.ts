@@ -6,6 +6,7 @@ export interface CheckText {
 const fixes: Record<string, string> = {
   'common.sudo': 'запустите от root или с sudo для полной проверки',
   'common.none': 'ничего делать не нужно',
+  'common.network': 'проверьте сеть и доступность домена',
   'base.os': 'обновить выпуск до поддерживаемого',
   'base.autoupdates': 'поставить unattended-upgrades и включить только security-обновления',
   'base.pending': 'перезагрузить сервер и установить обновления безопасности',
@@ -23,6 +24,14 @@ const fixes: Record<string, string> = {
   'f2b.active': 'поставить fail2ban и включить джейл sshd',
   'f2b.docker': 'перевести баны в цепочку DOCKER-USER',
   crowdsec: 'поставить баунсер и подключить CAPI',
+  'web.secrets': 'закрыть в прокси, отдавать 404 или 444',
+  'web.sourcemaps': 'не публиковать карты исходников',
+  'web.headers': 'выставить HSTS, nosniff, frame-ancestors, Referrer-Policy и CSP',
+  'web.tls': 'продлить сертификат и выключить TLS 1.0/1.1',
+  'web.cors': 'разрешить только свои источники',
+  'web.cookies': 'выставить Secure, HttpOnly и SameSite',
+  'web.ratelimit': 'включить лимит запросов на прокси',
+  'web.banner': 'убрать версии из заголовков',
   'ops.backup': 'делать бэкап на другой хост и проверить восстановление',
   'ops.monitor': 'поставить Uptime Kuma или аналог на другой машине и оповещения в Telegram',
 }
@@ -96,6 +105,38 @@ const checks: Record<string, CheckText> = {
     title: 'CrowdSec и баунсер',
     problem: 'CrowdSec не стоит или стоит без баунсера либо без CAPI',
   },
+  'web.secrets': {
+    title: 'утечки по известным адресам',
+    problem: 'по известным путям отдаётся настоящее содержимое',
+  },
+  'web.sourcemaps': {
+    title: 'карты исходников',
+    problem: 'карта исходников отдаётся',
+  },
+  'web.headers': {
+    title: 'заголовки безопасности',
+    problem: 'нет HSTS, nosniff, защиты от встраивания, Referrer-Policy или CSP',
+  },
+  'web.tls': {
+    title: 'сертификат и протоколы',
+    problem: 'сертификат истекает или принимаются TLS 1.0/1.1',
+  },
+  'web.cors': {
+    title: 'CORS',
+    problem: 'чужой Origin допускается вместе с credentials',
+  },
+  'web.cookies': {
+    title: 'флаги cookie',
+    problem: 'сессионная cookie без Secure, HttpOnly или SameSite',
+  },
+  'web.ratelimit': {
+    title: 'лимит запросов',
+    problem: 'на 30 быстрых запросов ни одного 429',
+  },
+  'web.banner': {
+    title: 'версии ПО в ответах',
+    problem: 'Server или X-Powered-By показывает версию',
+  },
   'ops.backup': {
     title: 'бэкап вне сервера',
     problem: 'бэкапа не нашли или он пишется только на этот же диск',
@@ -154,7 +195,7 @@ const report = {
     '  --json              отчёт в JSON',
     '  --only id,id        выполнить только эти проверки',
     '  --skip id,id        пропустить эти проверки',
-    '  --domain <host>     домен для будущих проверок сайта снаружи',
+    '  --domain <host>     домен для проверок сайта снаружи (раздел 5)',
     '  --help, -h          эта справка',
     '  --version, -v       версия',
     '',
@@ -223,7 +264,46 @@ const facts = {
   cscliAbsent: (): string => 'cscli не найден, CrowdSec не стоит',
   backupFound: (command: string, remote: boolean): string =>
     remote ? `бэкап: ${command}, пишет наружу` : `бэкап: ${command}, только локально`,
+  backupRemote: (source: string, command: string): string =>
+    `${source}: ${command} — пишет наружу, восстановление не проверено`,
+  backupLocal: (source: string, command: string): string =>
+    `${source}: ${command} — только локально`,
+  backupUnknown: (source: string, command: string): string =>
+    `${source}: ${command} — куда пишет, не определить, проверьте руками`,
   backupNone: (): string => 'заданий бэкапа не нашли',
+  firewallOnlyAllowed: (): string =>
+    'сетевой экран не найден, на всех адресах только 22, 80 и 443 — включить вторым слоем',
+  noListeningServices: (): string => 'служб, которые слушают порты, не нашли',
+  unitsUnknown: (): string => 'не удалось определить юниты слушающих процессов',
+  sshNotEvaluated: (): string => 'ssh не оценивается: его высокая оценка — норма',
+  webNoDomain: (): string => 'домен не задан (--domain), проверка сайта снаружи неприменима',
+  webRequestFailed: (what: string, detail: string): string =>
+    `запрос ${what} не удался: ${detail}`,
+  webSecretsNone: (): string => 'утечек по известным адресам нет',
+  webSecretLeak: (path: string): string => `по ${path} отдаётся настоящее содержимое`,
+  webSourceMapsNone: (): string => 'карт исходников не нашли',
+  webSourceMapLeak: (url: string): string => `карта исходников отдаётся: ${url}`,
+  webHeaderMissing: (name: string): string => `нет ${name}`,
+  webHeadersOk: (): string => 'заголовки безопасности на месте',
+  webCertDays: (days: number): string => `сертификат действует ещё ${days} дн`,
+  webCertSoon: (days: number): string => `сертификат истекает через ${days} дн`,
+  webCertExpired: (days: number): string => `сертификат истёк ${days} дн назад`,
+  webLegacyTlsAccepted: (): string => 'TLS 1.0/1.1 принимаются',
+  webLegacyTlsRefused: (): string => 'TLS 1.0/1.1 отклоняются',
+  webTlsFailed: (detail: string): string => `TLS-рукопожатие не удалось: ${detail}`,
+  webCorsOk: (): string => 'CORS не открыт для чужих источников',
+  webCorsOpen: (origin: string, credentials: boolean): string =>
+    credentials
+      ? `CORS: ${origin} допускается вместе с credentials`
+      : `CORS: ${origin} открыт для чужих источников`,
+  webCookiesNone: (): string => 'cookie на главной не ставятся',
+  webCookiesOk: (): string => 'флаги сессионных cookie на месте',
+  webCookieBad: (name: string, missing: string): string => `cookie ${name}: нет ${missing}`,
+  webRateLimitHit: (count: number, total: number): string =>
+    `ответов 429: ${count} из ${total}`,
+  webRateLimitNone: (total: number): string => `на ${total} быстрых запросов ни одного 429`,
+  webBannerNone: (): string => 'версий в заголовках нет',
+  webBannerVersion: (header: string, value: string): string => `${header}: ${value}`,
   monitorOutside: (): string => 'проверка возможна только снаружи',
   domainAccepted: (domain: string): string => `домен принят для будущих проверок сайта: ${domain}`,
   noExposedPorts: (): string => 'на всех адресах только разрешённые порты',
