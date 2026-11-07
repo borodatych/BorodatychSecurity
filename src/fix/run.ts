@@ -17,6 +17,7 @@ import {
 import { createFixCtx } from './ctx'
 import { unifiedDiff } from './diff'
 import {
+  NGINX_HEADERS_SNIPPET_PATH,
   NGINX_RATELIMIT_PATH,
   NGINX_SNIPPET_PATH,
   httpIncludesConfD,
@@ -233,6 +234,7 @@ async function buildPlan(
       files,
       httpIncludesConfD: httpIncludesConfD(files),
       snippetBefore: await ctx.read(NGINX_SNIPPET_PATH),
+      headersSnippetBefore: await ctx.read(NGINX_HEADERS_SNIPPET_PATH),
       ratelimitBefore: await ctx.read(NGINX_RATELIMIT_PATH),
     })
     return { domain, server, checks: [...ids], edits: plan.edits, skipped: plan.skipped, csp }

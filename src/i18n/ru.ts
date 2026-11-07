@@ -378,6 +378,8 @@ const facts = {
   webSourceMapLeak: (url: string): string => `карта исходников отдаётся: ${url}`,
   webHeaderMissing: (name: string): string => `нет ${name}`,
   webHeadersOk: (): string => 'заголовки безопасности на месте',
+  webCspReportOnly: (): string =>
+    'CSP только в режиме Report-Only: после недели без нарушений переименуйте заголовок в Content-Security-Policy',
   webCertDays: (days: number): string => `сертификат действует ещё ${days} дн`,
   webCertSoon: (days: number): string => `сертификат истекает через ${days} дн`,
   webCertExpired: (days: number): string => `сертификат истёк ${days} дн назад`,

@@ -24,13 +24,18 @@ export const webHeaders: Check = {
     if (!audit.nosniff) missing.push('X-Content-Type-Options: nosniff')
     if (!audit.frame) missing.push('X-Frame-Options или frame-ancestors')
     if (!audit.referrer) missing.push('Referrer-Policy')
-    if (!audit.csp) missing.push('Content-Security-Policy')
-    if (missing.length === 0) {
+    if (!audit.csp && !audit.cspReportOnly) missing.push('Content-Security-Policy')
+    // Report-Only — честный первый шаг, но защиты ещё нет: проверка остаётся предупреждением с подсказкой
+    const reportOnly = !audit.csp && audit.cspReportOnly
+    if (missing.length === 0 && !reportOnly) {
       return { status: 'ok', findings: [ru.facts.webHeadersOk()], fix: 'web.headers' }
     }
     return {
       status: 'warn',
-      findings: missing.map((name) => ru.facts.webHeaderMissing(name)),
+      findings: [
+        ...missing.map((name) => ru.facts.webHeaderMissing(name)),
+        ...(reportOnly ? [ru.facts.webCspReportOnly()] : []),
+      ],
       fix: 'web.headers',
     }
   },

@@ -611,8 +611,8 @@ export const config = { matcher: '/(.*)' }`,
         ],
         snippet: {
           lang: 'caddyfile',
-          code: `@maps path *.map
-respond @maps 404`,
+          code: `@borodatych_security_maps path *.map
+respond @borodatych_security_maps 404`,
         },
       },
       apache: {

@@ -3,6 +3,11 @@ import type { FixEdit, FixSkip } from './types'
 
 /** Наш сниппет с директивами уровня server */
 export const NGINX_SNIPPET_PATH = '/etc/nginx/snippets/borodatych-security.conf'
+/**
+ * Только заголовки: нужны в location, где есть свой add_header.
+ * Такой location не наследует add_header из server.
+ */
+export const NGINX_HEADERS_SNIPPET_PATH = '/etc/nginx/snippets/borodatych-security-headers.conf'
 /** Зона лимита живёт в http, поэтому отдельным файлом в conf.d */
 export const NGINX_RATELIMIT_PATH = '/etc/nginx/conf.d/borodatych-security-ratelimit.conf'
 /** Маркер: по нему узнаём свой файл и не трогаем чужой */
@@ -11,6 +16,8 @@ export const NGINX_MARKER = '# borodatych-security'
 export const NGINX_ZONE = 'borodatych_security'
 /** Строка include, которую вставляем после server_name */
 export const NGINX_INCLUDE = `include ${NGINX_SNIPPET_PATH};  # borodatych-security`
+/** Строка include для location с собственным add_header */
+export const NGINX_HEADERS_INCLUDE = `include ${NGINX_HEADERS_SNIPPET_PATH};  # borodatych-security`
 
 export interface NginxFile {
   path: string
@@ -39,7 +46,8 @@ export interface NginxServerBlock {
   /** id проверок, директивы которых уже заданы в блоке вручную */
   present: string[]
   serverNameStart: number | null
-  serverNameLineEnd: number | null
+  /** Индекс `;` после server_name: от него ищем границу строки внутри блока */
+  serverNameEnd: number | null
   line: number
 }
 
@@ -335,14 +343,13 @@ export function parseServers(file: NginxFile): NginxServerBlock[] {
     const listens: string[] = []
     let hasInclude = false
     let serverNameStart: number | null = null
-    let serverNameLineEnd: number | null = null
+    let serverNameEnd: number | null = null
     for (const directive of directives) {
       if (directive.name === 'server_name') {
         names.push(...words(directive.args))
-        if (serverNameLineEnd === null) {
+        if (serverNameEnd === null) {
           serverNameStart = directive.start
-          const newline = file.text.indexOf('\n', directive.end)
-          serverNameLineEnd = newline === -1 ? directive.end + 1 : newline + 1
+          serverNameEnd = directive.end
         }
       }
       if (directive.name === 'listen') listens.push(directive.args)
@@ -360,7 +367,7 @@ export function parseServers(file: NginxFile): NginxServerBlock[] {
       hasInclude,
       present: managedItems(directives),
       serverNameStart,
-      serverNameLineEnd,
+      serverNameEnd,
       line: lineOf(file.text, raw.start),
     })
   }
@@ -416,6 +423,16 @@ function nginxQuote(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
+function headerDirectives(csp: string): string[] {
+  return [
+    'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;',
+    'add_header X-Content-Type-Options "nosniff" always;',
+    'add_header Referrer-Policy "strict-origin-when-cross-origin" always;',
+    'add_header X-Frame-Options "SAMEORIGIN" always;',
+    `add_header Content-Security-Policy-Report-Only "${nginxQuote(csp)}" always;`,
+  ]
+}
+
 /** Содержимое нашего сниппета: только выбранные проверки, CSP в Report-Only */
 export function nginxSnippetContent(
   checks: readonly string[],
@@ -425,15 +442,7 @@ export function nginxSnippetContent(
   const lines: string[] = [
     `${NGINX_MARKER}: файл создан командой fix, ручные правки будут перезаписаны`,
   ]
-  if (checks.includes('web.headers')) {
-    lines.push(
-      'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;',
-      'add_header X-Content-Type-Options "nosniff" always;',
-      'add_header Referrer-Policy "strict-origin-when-cross-origin" always;',
-      'add_header X-Frame-Options "SAMEORIGIN" always;',
-      `add_header Content-Security-Policy-Report-Only "${nginxQuote(csp)}" always;`,
-    )
-  }
+  if (checks.includes('web.headers')) lines.push(...headerDirectives(csp))
   if (checks.includes('web.banner')) lines.push('server_tokens off;')
   if (checks.includes('web.sourcemaps')) {
     lines.push('location ~* \\.map$ {', '    return 404;', '}')
@@ -442,6 +451,15 @@ export function nginxSnippetContent(
     lines.push(`limit_req zone=${NGINX_ZONE} burst=20 nodelay;`, 'limit_req_status 429;')
   }
   if (lines.length === 1) return ''
+  return `${lines.join('\n')}\n`
+}
+
+/** Только add_header: включается внутрь location, где свой add_header отменяет наследование */
+export function nginxHeadersSnippetContent(csp: string): string {
+  const lines: string[] = [
+    `${NGINX_MARKER}: заголовки для location с собственным add_header`,
+    ...headerDirectives(csp),
+  ]
   return `${lines.join('\n')}\n`
 }
 
@@ -467,6 +485,7 @@ export interface NginxPlanInput {
   files: readonly NginxFile[]
   httpIncludesConfD: boolean
   snippetBefore: string | null
+  headersSnippetBefore?: string | null
   ratelimitBefore: string | null
 }
 
@@ -475,14 +494,65 @@ export interface NginxPlan {
   skipped: FixSkip[]
 }
 
-function planSnippetFile(
+/** location внутри server, где есть свой add_header и потому нет наследования */
+interface NginxLocationTarget {
+  file: string
+  open: number
+  close: number
+  line: number
+  hasInclude: boolean
+  present: string[]
+}
+
+function locationsWithAddHeader(
+  file: NginxFile,
+  server: NginxServerBlock,
+): NginxLocationTarget[] {
+  const result: NginxLocationTarget[] = []
+  for (const directive of parseDirectives(file.text, server.open + 1, server.close)) {
+    if (!directive.block || directive.name !== 'location') continue
+    if (directive.blockOpen === null || directive.blockClose === null) continue
+    const inner = parseDirectives(file.text, directive.blockOpen + 1, directive.blockClose)
+    if (!inner.some((item) => item.name === 'add_header')) continue
+    result.push({
+      file: file.path,
+      open: directive.blockOpen,
+      close: directive.blockClose,
+      line: lineOf(file.text, directive.start),
+      hasInclude: inner.some(
+        (item) => item.name === 'include' && item.args.includes('borodatych-security-headers'),
+      ),
+      present: managedItems(inner),
+    })
+  }
+  return result
+}
+
+/** Отступ первой значимой строки тела блока */
+function bodyIndent(text: string, open: number, close: number): string {
+  const newline = text.indexOf('\n', open + 1)
+  if (newline === -1) return '    '
+  let index = newline + 1
+  while (index < close) {
+    const end = text.indexOf('\n', index)
+    const lineEnd = end === -1 ? close : end
+    const line = text.slice(index, lineEnd)
+    if (line.trim().length > 0) return /^[\t ]*/.exec(line)?.[0] ?? '    '
+    if (end === -1) break
+    index = end + 1
+  }
+  return '    '
+}
+
+function planManagedFile(
+  path: string,
   expected: string,
   before: string | null,
 ): { edit: FixEdit | null; usable: boolean } {
   if (before === null) {
     return {
       edit: {
-        path: NGINX_SNIPPET_PATH,
+        path,
         before: null,
         after: expected,
         kind: 'create',
@@ -495,7 +565,7 @@ function planSnippetFile(
   if (before.includes(NGINX_MARKER)) {
     return {
       edit: {
-        path: NGINX_SNIPPET_PATH,
+        path,
         before,
         after: expected,
         kind: 'modify',
@@ -612,7 +682,7 @@ export function planNginxFix(input: NginxPlanInput): NginxPlan {
 
   let snippetUsable = true
   if (expectedSnippet.length > 0) {
-    const planned = planSnippetFile(expectedSnippet, input.snippetBefore)
+    const planned = planManagedFile(NGINX_SNIPPET_PATH, expectedSnippet, input.snippetBefore)
     snippetUsable = planned.usable
     if (planned.edit !== null) edits.push(planned.edit)
     if (!planned.usable) {
@@ -643,11 +713,17 @@ export function planNginxFix(input: NginxPlanInput): NginxPlan {
     }
   }
 
+  const insertions = new Map<string, { at: number; text: string }[]>()
+  const addInsertion = (path: string, at: number, text: string): void => {
+    const list = insertions.get(path) ?? []
+    list.push({ at, text })
+    insertions.set(path, list)
+  }
+
   if (snippetUsable && expectedSnippet.length > 0) {
-    const insertions = new Map<string, { at: number; text: string }[]>()
     for (const server of targets) {
       if (server.hasInclude) continue
-      if (server.serverNameLineEnd === null) {
+      if (server.serverNameEnd === null) {
         for (const checkId of snippetChecks) {
           skipped.push({
             checkId,
@@ -664,32 +740,107 @@ export function planNginxFix(input: NginxPlanInput): NginxPlan {
         server.serverNameStart === null
           ? '    '
           : lineIndent(file.text, server.serverNameStart)
-      const newline = file.text.indexOf('\n', server.serverNameLineEnd)
+      const newline = file.text.indexOf('\n', server.serverNameEnd)
       const insertion =
-        newline === -1
-          ? { at: file.text.length, text: `\n${indent}${NGINX_INCLUDE}` }
-          : { at: newline + 1, text: `${indent}${NGINX_INCLUDE}\n` }
-      const list = insertions.get(server.file) ?? []
-      list.push(insertion)
-      insertions.set(server.file, list)
+        newline !== -1 && newline < server.close
+          ? { at: newline + 1, text: `${indent}${NGINX_INCLUDE}\n` }
+          : {
+              at: server.serverNameEnd + 1,
+              // Перевод строки обязателен: иначе `#` в include съест остаток строки
+              text: `\n${indent}${NGINX_INCLUDE}\n${indent}`,
+            }
+      addInsertion(server.file, insertion.at, insertion.text)
     }
+  }
 
-    for (const [path, list] of insertions) {
-      const file = input.files.find((item) => item.path === path)
+  // location со своим add_header не наследует серверные: кладём туда только заголовки
+  const headersWanted =
+    !manual.has('web.headers') &&
+    (snippetChecks.includes('web.headers') || existingSnippetChecks.includes('web.headers'))
+  if (headersWanted) {
+    const locationTargets: NginxLocationTarget[] = []
+    for (const server of targets) {
+      const file = input.files.find((item) => item.path === server.file)
       if (file === undefined) continue
-      let after = file.text
-      for (const insertion of [...list].sort((a, b) => b.at - a.at)) {
-        after = `${after.slice(0, insertion.at)}${insertion.text}${after.slice(insertion.at)}`
-      }
-      if (after !== file.text) {
-        edits.push({
-          path,
-          before: file.text,
-          after,
-          kind: 'modify',
-          summary: ru.fix.summaryInclude,
+      locationTargets.push(...locationsWithAddHeader(file, server))
+    }
+    const locationNeedsHeaders = locationTargets.filter(
+      (location) => !location.hasInclude && !location.present.includes('web.headers'),
+    )
+    for (const location of locationTargets) {
+      if (location.present.includes('web.headers')) {
+        skipped.push({
+          checkId: 'web.headers',
+          target: `${location.file}:${location.line}`,
+          reason: 'already',
+          detail: ru.fix.alreadyManual(ru.fix.itemName('web.headers')),
         })
       }
+    }
+
+    const headersBefore = input.headersSnippetBefore ?? null
+    const expectedHeaders = nginxHeadersSnippetContent(input.csp)
+    const planHeaders = (before: string | null): boolean => {
+      const planned = planManagedFile(NGINX_HEADERS_SNIPPET_PATH, expectedHeaders, before)
+      if (planned.edit !== null) edits.push(planned.edit)
+      return planned.usable
+    }
+
+    let headersSnippetUsable = false
+    if (locationNeedsHeaders.length > 0) {
+      headersSnippetUsable = planHeaders(headersBefore)
+      if (!headersSnippetUsable) {
+        for (const location of locationNeedsHeaders) {
+          skipped.push({
+            checkId: 'web.headers',
+            target: `${location.file}:${location.line}`,
+            reason: 'partial',
+            detail: ru.fix.foreignFile(NGINX_HEADERS_SNIPPET_PATH),
+          })
+        }
+      }
+    } else if (headersBefore !== null) {
+      headersSnippetUsable = planHeaders(headersBefore)
+    }
+
+    if (headersSnippetUsable) {
+      for (const location of locationNeedsHeaders) {
+        const file = input.files.find((item) => item.path === location.file)
+        if (file === undefined) continue
+        const indent = bodyIndent(file.text, location.open, location.close)
+        const newline = file.text.indexOf('\n', location.open + 1)
+        if (
+          newline !== -1 &&
+          newline < location.close &&
+          file.text.slice(location.open + 1, newline).trim().length === 0
+        ) {
+          addInsertion(location.file, newline + 1, `${indent}${NGINX_HEADERS_INCLUDE}\n`)
+        } else {
+          addInsertion(
+            location.file,
+            location.open + 1,
+            `\n${indent}${NGINX_HEADERS_INCLUDE}\n${indent}`,
+          )
+        }
+      }
+    }
+  }
+
+  for (const [path, list] of insertions) {
+    const file = input.files.find((item) => item.path === path)
+    if (file === undefined) continue
+    let after = file.text
+    for (const insertion of [...list].sort((a, b) => b.at - a.at)) {
+      after = `${after.slice(0, insertion.at)}${insertion.text}${after.slice(insertion.at)}`
+    }
+    if (after !== file.text) {
+      edits.push({
+        path,
+        before: file.text,
+        after,
+        kind: 'modify',
+        summary: ru.fix.summaryInclude,
+      })
     }
   }
 

@@ -121,6 +121,7 @@ describe('web.headers', () => {
       frame: true,
       referrer: true,
       csp: true,
+      cspReportOnly: false,
     })
     expect(auditSecurityHeaders(headers('weakHeaders'))).toEqual({
       hsts: false,
@@ -128,7 +129,16 @@ describe('web.headers', () => {
       frame: false,
       referrer: false,
       csp: false,
+      cspReportOnly: false,
     })
+  })
+
+  test('CSP только Report-Only — отмечается отдельно, а не как отсутствующий', () => {
+    const audit = auditSecurityHeaders({
+      'content-security-policy-report-only': "default-src 'self'",
+    })
+    expect(audit.csp).toBe(false)
+    expect(audit.cspReportOnly).toBe(true)
   })
 })
 

@@ -3,6 +3,8 @@ import { AccessError } from '../src/account/require'
 import { planCaddyFix, caddySnippetFile, parseCaddyfile } from '../src/fix/caddy'
 import { diffLines, unifiedDiff } from '../src/fix/diff'
 import {
+  NGINX_HEADERS_INCLUDE,
+  NGINX_HEADERS_SNIPPET_PATH,
   NGINX_INCLUDE,
   NGINX_SNIPPET_PATH,
   planNginxFix,
@@ -326,6 +328,91 @@ describe('nginx: разбор и план', () => {
     expect(updated).toContain('location ~* \\.map$')
   })
 
+  test('add_header в location: заголовки кладём отдельным include внутрь location', () => {
+    const text = `server {
+    listen 443 ssl;
+    server_name example.ru;
+
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ =404;
+    }
+}
+`
+    const plan = planNginxFix({
+      domain: 'example.ru',
+      checks: ['web.headers'],
+      csp: CSP,
+      files: [{ path: SITE_CONF, text }],
+      httpIncludesConfD: true,
+      snippetBefore: null,
+      headersSnippetBefore: null,
+      ratelimitBefore: null,
+    })
+    const headersSnippet = plan.edits.find((edit) => edit.path === NGINX_HEADERS_SNIPPET_PATH)
+    expect(headersSnippet?.after).toContain('Strict-Transport-Security')
+    const siteEdit = plan.edits.find((edit) => edit.path === SITE_CONF)
+    expect(siteEdit?.after).toContain(NGINX_HEADERS_INCLUDE)
+    expect(siteEdit?.after).toContain('add_header Cache-Control "no-cache"')
+  })
+
+  test('однострочный server-блок: include остаётся внутри блока и не комментирует хвост', () => {
+    const text = 'server { listen 443 ssl; server_name example.ru; root /var/www; }\n'
+    const plan = planNginxFix({
+      domain: 'example.ru',
+      checks: ['web.headers'],
+      csp: CSP,
+      files: [{ path: SITE_CONF, text }],
+      httpIncludesConfD: true,
+      snippetBefore: null,
+      headersSnippetBefore: null,
+      ratelimitBefore: null,
+    })
+    const siteEdit = plan.edits.find((edit) => edit.path === SITE_CONF)?.after ?? ''
+    expect(siteEdit).toContain(`${NGINX_INCLUDE}\n`)
+    expect(siteEdit.indexOf(NGINX_INCLUDE)).toBeLessThan(siteEdit.indexOf('root /var/www'))
+    expect(siteEdit.indexOf(NGINX_INCLUDE)).toBeLessThan(siteEdit.lastIndexOf('}'))
+  })
+
+  test('повторный fix не дублирует include заголовков в location', () => {
+    const text = `server {
+    listen 443 ssl;
+    server_name example.ru;
+
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ =404;
+    }
+}
+`
+    const first = planNginxFix({
+      domain: 'example.ru',
+      checks: ['web.headers'],
+      csp: CSP,
+      files: [{ path: SITE_CONF, text }],
+      httpIncludesConfD: true,
+      snippetBefore: null,
+      headersSnippetBefore: null,
+      ratelimitBefore: null,
+    })
+    const siteAfter = first.edits.find((edit) => edit.path === SITE_CONF)?.after ?? text
+    const snippetAfter =
+      first.edits.find((edit) => edit.path === NGINX_SNIPPET_PATH)?.after ?? ''
+    const headersAfter =
+      first.edits.find((edit) => edit.path === NGINX_HEADERS_SNIPPET_PATH)?.after ?? ''
+    const second = planNginxFix({
+      domain: 'example.ru',
+      checks: ['web.headers'],
+      csp: CSP,
+      files: [{ path: SITE_CONF, text: siteAfter }],
+      httpIncludesConfD: true,
+      snippetBefore: snippetAfter,
+      headersSnippetBefore: headersAfter,
+      ratelimitBefore: null,
+    })
+    expect(second.edits).toHaveLength(0)
+  })
+
   test('conf.d считается только при include, который подхватит наш файл', () => {
     expect(
       httpIncludesConfD([{ path: NGINX_CONF, text: 'http { include /etc/nginx/conf.d/*.conf; }' }]),
@@ -413,7 +500,27 @@ www.example.ru, example.ru {
     })
     const after = second.edits[0]?.after ?? withHeaders
     expect(after).toContain('Strict-Transport-Security')
-    expect(after).toContain('@maps path *.map')
+    expect(after).toContain('@borodatych_security_maps path *.map')
+  })
+
+  test('чужой @maps не мешает защите sourcemaps и не даёт дубль матчера', () => {
+    const site = `stand.test {
+    @maps path /health
+    respond @maps "ok"
+    respond "ok"
+}
+`
+    const plan = planCaddyFix({
+      domain: 'stand.test',
+      checks: ['web.sourcemaps'],
+      csp: CSP,
+      text: site,
+    })
+    expect(plan.edits).toHaveLength(1)
+    const after = plan.edits[0]?.after ?? ''
+    expect(after).toContain('@borodatych_security_maps path *.map')
+    expect(after).toContain('respond @borodatych_security_maps 404')
+    expect(after).toContain('@maps path /health')
   })
 
   test('Caddy ratelimit — рецепт, не правка', () => {
@@ -593,6 +700,58 @@ describe('fix: полный прогон на подменах', () => {
     const after = ctx.files.get(CADDYFILE) ?? ''
     expect(after).toContain('(borodatych-security)')
     expect(after).toContain('import borodatych-security')
+  })
+
+  test('systemctl нет — nginx перезагружается через nginx -s reload', async () => {
+    const ctx = nginxCtx((cmd, commandArgs) => {
+      if (cmd === 'nginx' && commandArgs[0] === '-T') return ok(nginxDump())
+      if (cmd === 'nginx' && commandArgs[0] === '-t') return ok('test is successful')
+      if (cmd === 'nginx' && commandArgs[0] === '-s') return ok()
+      if (cmd === 'systemctl') return bad('systemctl: not found', 'missing')
+      if (cmd === 'caddy') return bad('caddy: not found', 'missing')
+      return bad('not found', 'missing')
+    })
+    const code = await runFix({
+      ctx,
+      args: args(),
+      deps: { requireAccess: allowAccess(), auditSite: auditThenFixed() },
+    })
+    expect(code).toBe(0)
+    const reload = ctx.commands.find(
+      (command) => command.cmd === 'nginx' && command.args[0] === '-s',
+    )
+    expect(reload?.args).toEqual(['-s', 'reload'])
+  })
+
+  test('systemctl нет — caddy перезагружается через caddy reload', async () => {
+    const text = 'example.ru {\n    reverse_proxy localhost:3000\n}\n'
+    const ctx = new FakeCtx((cmd, commandArgs) => {
+      if (cmd === 'nginx') return bad('nginx: not found', 'missing')
+      if (cmd === 'caddy' && commandArgs[0] === 'version') return ok('v2.8.4')
+      if (cmd === 'caddy' && commandArgs[0] === 'validate') return ok('Valid configuration')
+      if (cmd === 'caddy' && commandArgs[0] === 'reload') return ok()
+      if (cmd === 'systemctl') return bad('systemctl: not found', 'missing')
+      return bad('not found', 'missing')
+    })
+    ctx.files.set(CADDYFILE, text)
+    const code = await runFix({
+      ctx,
+      args: args(),
+      deps: {
+        requireAccess: allowAccess(),
+        auditSite: () =>
+          Promise.resolve({
+            ...statusReport(['web.banner'], 'warn'),
+            site: { stacks: ['caddy'], csp: CSP },
+          }),
+      },
+    })
+    // перепроверка на подмене возвращает warn, но reload должен быть прямым
+    expect(code).toBe(1)
+    const reload = ctx.commands.find(
+      (command) => command.cmd === 'caddy' && command.args[0] === 'reload',
+    )
+    expect(reload?.args).toEqual(['reload', '--config', CADDYFILE, '--adapter', 'caddyfile'])
   })
 
   test('--json: в stdout только машинный итог', async () => {

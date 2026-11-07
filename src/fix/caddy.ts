@@ -5,6 +5,8 @@ import type { FixEdit, FixSkip } from './types'
 export const CADDYFILE_PATH = '/etc/caddy/Caddyfile'
 export const CADDY_MARKER = '# borodatych-security'
 export const CADDY_SNIPPET = 'borodatych-security'
+/** Имя матчера: не должно совпадать с матчерами сайта вроде @maps */
+export const CADDY_MAPS_MATCHER = 'borodatych_security_maps'
 
 export interface CaddyBlock {
   kind: 'site' | 'snippet' | 'global'
@@ -235,7 +237,12 @@ function presentItems(body: string): string[] {
   if (/\bheader\s+-Server\b/i.test(clean) || /(^|\n)\s*-Server\s*(\n|$)/.test(clean)) {
     present.push('web.banner')
   }
-  if (/\b@maps\b/i.test(clean) || /path\s+\*\.map\b/i.test(clean)) present.push('web.sourcemaps')
+  if (
+    new RegExp(`@${CADDY_MAPS_MATCHER}\\b`, 'i').test(clean) ||
+    /path\s+[^\n{]*\.map\b/i.test(clean)
+  ) {
+    present.push('web.sourcemaps')
+  }
   return present
 }
 
@@ -253,8 +260,8 @@ export function caddySnippetBlock(checks: readonly string[], csp: string): strin
   }
   if (checks.includes('web.banner')) lines.push('    header -Server')
   if (checks.includes('web.sourcemaps')) {
-    lines.push('    @maps path *.map')
-    lines.push('    respond @maps 404')
+    lines.push(`    @${CADDY_MAPS_MATCHER} path *.map`)
+    lines.push(`    respond @${CADDY_MAPS_MATCHER} 404`)
   }
   lines.push('}')
   return lines.join('\n')

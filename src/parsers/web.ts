@@ -138,6 +138,8 @@ export interface HeaderAudit {
   frame: boolean
   referrer: boolean
   csp: boolean
+  /** CSP включён только наблюдением: браузер шлёт отчёты, но ничего не блокирует */
+  cspReportOnly: boolean
 }
 
 export function auditSecurityHeaders(headers: HeaderMap): HeaderAudit {
@@ -150,6 +152,7 @@ export function auditSecurityHeaders(headers: HeaderMap): HeaderAudit {
       /frame-ancestors/i.test(csp),
     referrer: headerValue(headers, 'referrer-policy').length > 0,
     csp: csp.length > 0,
+    cspReportOnly: headerValue(headers, 'content-security-policy-report-only').length > 0,
   }
 }
 

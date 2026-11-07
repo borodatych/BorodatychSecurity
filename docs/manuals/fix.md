@@ -18,9 +18,9 @@ sudo npx @borodatych/security fix --domain example.ru --dry-run
 
 | Проверка | nginx | Caddy |
 |---|---|---|
-| `web.headers` | HSTS `max-age=31536000; includeSubDomains` (без preload), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy-Report-Only` | то же в `header { }` |
+| `web.headers` | HSTS `max-age=31536000; includeSubDomains` (без preload), `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy-Report-Only`. Если в `location` есть свой `add_header`, туда дополнительно кладётся `include` сниппета только с заголовками | то же в `header { }` |
 | `web.banner` | `server_tokens off;` | `header -Server` |
-| `web.sourcemaps` | `location ~* \.map$ { return 404; }` | `@maps path *.map` и `respond @maps 404` |
+| `web.sourcemaps` | `location ~* \.map$ { return 404; }` | `@borodatych_security_maps path *.map` и `respond @borodatych_security_maps 404` |
 | `web.ratelimit` | `limit_req_zone` в `/etc/nginx/conf.d/borodatych-security-ratelimit.conf` и `limit_req` в server | только рецепт |
 
 CSP всегда включается в режиме `Report-Only`: сначала смотрите отчёты, через неделю без нарушений
@@ -54,8 +54,9 @@ CSP всегда включается в режиме `Report-Only`: снача�
 
 - перед сервером CDN или кэш (Cloudflare, nginx-прокси на другой машине) — обновите кэш;
 - домен обслуживает другой сервер, а не тот, где вы запустили `fix`;
-- приложение само перезаписывает заголовки (`add_header` внутри `location` отменяет наследование
-  серверных заголовков в nginx — проверьте, нет ли такого блока).
+- приложение само перезаписывает заголовки: `add_header` внутри `location` отменяет наследование
+  серверных заголовков в nginx. Прямые `location` в том же файле `fix` закрывает отдельным
+  сниппетом, но `location` из подключённого файла (`include`) он не видит — проверьте вручную.
 
 Вывод покажет, какая проверка осталась в `warn`/`fail`, и подсказку про кэш или CDN.
 
@@ -70,6 +71,33 @@ sudo npx @borodatych/security fix --rollback /var/backups/borodatych-security/20
 Откат читает `manifest.json` в каталоге бэкапа, возвращает файлы, удаляет созданные `fix` файлы,
 проверяет конфиг и перезагружает службу. Если конфиг после отката не проходит — команда скажет
 об этом и выйдет с кодом `1`.
+
+## Как проверено
+
+Отдельный стенд `bun run stand` (в `bun test` и CI не входит) поднимает настоящие контейнеры
+`nginx:1.27.3-alpine` и `caddy:2.8.4-alpine` с сайтом `stand.test`. У nginx — server на 80 и 443
+с самоподписанным сертификатом, у Caddy — `tls internal` и отдельный блок `http://stand.test:8080`.
+Затем запускается настоящий `runFix` с `FixCtx`, у которого чтение, запись и команды идут
+в контейнер через `docker exec` / `docker cp`; снаружи подменены только доступ и аудит.
+
+Проверяется реальными бинарями:
+
+- `nginx -t` и `caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile` — успех;
+- перезагрузка без `systemctl`: в контейнерах его нет, поэтому работает прямой путь
+  `nginx -s reload` / `caddy reload`; заголовки появляются, только если reload действительно прошёл;
+- `Strict-Transport-Security`, `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options`,
+  `Content-Security-Policy-Report-Only` присутствуют;
+- `Server` без версии: у nginx ровно `nginx`, у Caddy заголовка нет;
+- `GET /app.js.map` → 404;
+- nginx: 40 быстрых запросов дают хотя бы один 429/503 (`limit_req`);
+- повторный `fix` — пустой план, файлы не меняются байт-в-байт;
+- `--rollback <каталог>` возвращает файлы как до `fix`, проверка конфига проходит, заголовки исчезают;
+- битый конфиг на проверке после правки (настоящий валидатор с заведомо испорченным дополнительным
+  файлом) — `fix` откатывает все файлы.
+
+Фикстур с выводом `nginx -T` или Caddyfile в `tests/fixtures` нет, поэтому дополнительных случаев
+стенд не гоняет. Данные стенда лежат в `/Volumes/Storage/Caches/borodatych-security-stand/`,
+контейнеры и сеть удаляются в конце, образы остаются в кэше Docker.
 
 ## Флаги
 

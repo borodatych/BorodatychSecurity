@@ -35,6 +35,7 @@
   "scripts": {
     "check": "tsc --noEmit && eslint .",
     "test": "bun test",
+    "stand": "bun run tests/stand/index.ts",
     "build": "bun build src/cli.ts --target node --outfile dist/cli.js && bun build src/audit.ts src/i18n/ru.ts src/recipes/index.ts --target node --root src --outdir dist && tsc -p tsconfig.build.json"
   },
   "devDependencies": {
