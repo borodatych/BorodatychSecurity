@@ -57,7 +57,7 @@ export async function main(argv: readonly string[]): Promise<number | null> {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
     } else {
       const color = process.stdout.isTTY && process.env.NO_COLOR === undefined
-      process.stdout.write(`${renderText(report, { color })}\n`)
+      process.stdout.write(`${renderText(report, { color, quiet: options.quiet })}\n`)
     }
     return exitCodeFor(report.checks)
   } catch (error) {

@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util'
 
 export interface CliOptions {
   json: boolean
+  quiet: boolean
   help: boolean
   version: boolean
   only?: string[]
@@ -30,6 +31,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
       allowPositionals: false,
       options: {
         json: { type: 'boolean', default: false },
+        quiet: { type: 'boolean', default: false },
         only: { type: 'string' },
         skip: { type: 'string' },
         domain: { type: 'string' },
@@ -44,6 +46,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   const values = parsed.values
   const options: CliOptions = {
     json: values.json,
+    quiet: values.quiet,
     help: values.help,
     version: values.version,
   }

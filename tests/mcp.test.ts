@@ -211,6 +211,20 @@ describe('MCP-сервер по InMemoryTransport', () => {
     expect(textOf(result)).toContain('ssh.auth')
   })
 
+  test('отчёт MCP: строки-приглашения про сайт нет', async () => {
+    await ready
+    const result = (await client.callTool({
+      name: 'audit_server',
+      arguments: { only: ['ops.monitor'] },
+    })) as CallToolResult
+    expect(result.isError ?? false).toBe(false)
+    const text = textOf(result)
+    const report = JSON.parse(text) as { checks: { id: string }[] }
+    expect(report.checks.map((check) => check.id)).toEqual(['ops.monitor'])
+    expect(text).not.toContain('security.borodatych.ru')
+    expect(text).not.toContain(ru.report.promo)
+  })
+
   test('audit_server не берёт проверки сайта, сервер остаётся живым', async () => {
     await ready
     const bad = (await client.callTool({

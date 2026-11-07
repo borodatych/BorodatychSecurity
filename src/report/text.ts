@@ -18,6 +18,8 @@ const RESET = '\u001b[0m'
 
 export interface TextOptions {
   color: boolean
+  /** Не печатать строку-приглашение про сайт */
+  quiet?: boolean
 }
 
 function label(status: Status, color: boolean): string {
@@ -68,27 +70,31 @@ export function renderText(report: JsonReport, options: TextOptions): string {
   if (report.checks.length === 0) {
     lines.push('')
     lines.push(ru.report.noChecks)
-    return lines.join('\n')
-  }
+  } else {
+    const worst = sortChecks(report.checks).filter(
+      (check) => check.status === 'fail' || check.status === 'warn',
+    )
+    if (worst.length > 0) {
+      lines.push('')
+      lines.push(ru.report.worst)
+      for (const check of worst) {
+        lines.push(`  ${label(check.status, options.color)} ${check.id} — ${checkTitle(check)}`)
+      }
+    }
 
-  const worst = sortChecks(report.checks).filter(
-    (check) => check.status === 'fail' || check.status === 'warn',
-  )
-  if (worst.length > 0) {
-    lines.push('')
-    lines.push(ru.report.worst)
-    for (const check of worst) {
-      lines.push(`  ${label(check.status, options.color)} ${check.id} — ${checkTitle(check)}`)
+    const sections = [...new Set(report.checks.map((check) => check.section))].sort((a, b) => a - b)
+    for (const section of sections) {
+      lines.push('')
+      lines.push(`${String(section)}. ${ru.sections[section] ?? String(section)}`)
+      for (const check of sortChecks(report.checks.filter((item) => item.section === section))) {
+        renderCheck(check, options.color, lines)
+      }
     }
   }
 
-  const sections = [...new Set(report.checks.map((check) => check.section))].sort((a, b) => a - b)
-  for (const section of sections) {
+  if (options.quiet !== true) {
     lines.push('')
-    lines.push(`${String(section)}. ${ru.sections[section] ?? String(section)}`)
-    for (const check of sortChecks(report.checks.filter((item) => item.section === section))) {
-      renderCheck(check, options.color, lines)
-    }
+    lines.push(ru.report.promo)
   }
   return lines.join('\n')
 }

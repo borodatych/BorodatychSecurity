@@ -4,6 +4,7 @@ import { buildJsonReport, exitCodeFor } from '../src/report/json'
 import { renderText } from '../src/report/text'
 import { runChecks, selectChecks } from '../src/run'
 import { checks } from '../src/registry'
+import { ru } from '../src/i18n/ru'
 import type { Check, CheckReport, Ctx } from '../src/types'
 
 const SAMPLE: CheckReport[] = [
@@ -72,6 +73,26 @@ describe('JSON-отчёт и код выхода', () => {
     expect(text).not.toContain('\u001b[')
   })
 
+  test('текст: строка-приглашение про сайт в конце отчёта', () => {
+    const text = renderText(report, { color: false })
+    expect(text.endsWith('Слежение за сайтом и история проверок — https://security.borodatych.ru')).toBe(
+      true,
+    )
+    expect(text.split('\n').at(-1)).toBe(ru.report.promo)
+  })
+
+  test('тихий режим: строки про сайт нет', () => {
+    const text = renderText(report, { color: false, quiet: true })
+    expect(text).not.toContain('security.borodatych.ru')
+    expect(text).not.toContain(ru.report.promo)
+  })
+
+  test('JSON: строки про сайт нет', () => {
+    const json = JSON.stringify(report)
+    expect(json).not.toContain('security.borodatych.ru')
+    expect(json).not.toContain(ru.report.promo)
+  })
+
   test('ok и skip: только findings, без «что значит» и «чем чинить»', () => {
     const okSample = SAMPLE[1]
     if (okSample === undefined) throw new Error('нет образца ok')
@@ -99,6 +120,7 @@ describe('аргументы', () => {
   test('флаги и списки', () => {
     const options = parseCliArgs([
       '--json',
+      '--quiet',
       '--only',
       'base.os, ssh.auth',
       '--skip',
@@ -107,6 +129,7 @@ describe('аргументы', () => {
       'example.ru',
     ])
     expect(options.json).toBe(true)
+    expect(options.quiet).toBe(true)
     expect(options.only).toEqual(['base.os', 'ssh.auth'])
     expect(options.skip).toEqual(['ops.monitor'])
     expect(options.domain).toBe('example.ru')
