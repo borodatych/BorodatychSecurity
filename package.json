@@ -1,6 +1,6 @@
 {
   "name": "@borodatych/security",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Проверка защиты сервера: что открыто наружу и чем это закрыть",
   "type": "module",
   "main": "./dist/audit.js",
