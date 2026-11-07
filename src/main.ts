@@ -4,6 +4,7 @@ import { ApiClient, ApiError } from './account/api'
 import { apiBase, clearToken, clientName, readToken, writeToken } from './account/config'
 import { CliError, isAccountCommand, parseAccountArgs, parseCliArgs } from './args'
 import { audit } from './audit'
+import { fixFromArgs } from './fix/run'
 import { ru } from './i18n/ru'
 import { runMcpServer } from './mcp'
 import { checks as registry } from './registry'
@@ -138,6 +139,9 @@ export async function main(argv: readonly string[]): Promise<number | null> {
   }
 
   const first = argv[0]
+  if (first === 'fix') {
+    return await fixFromArgs(argv.slice(1))
+  }
   if (isAccountCommand(first)) {
     let accountOptions: ReturnType<typeof parseAccountArgs>
     try {

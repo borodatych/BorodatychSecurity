@@ -7,8 +7,10 @@ export { collectResources, buildCsp } from './csp'
 export type * from './types'
 
 /** Безопасный стартовый CSP, если пользователь не передал свой */
-const START_CSP =
+export const DEFAULT_CSP =
   "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+
+const START_CSP = DEFAULT_CSP
 
 /** Рецепт по id проверки; null, если проверка неизвестна */
 export function getRecipe(checkId: string, locale: RecipeLocale = 'ru'): Recipe | null {

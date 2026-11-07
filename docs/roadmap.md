@@ -19,6 +19,9 @@
 - [x] **Вход в CLI и MCP-инструменты починки** — `login`, `logout`, `whoami`, токен `bsec_…`,
   `fix_plan`, `get_recipe`, `verify_fix` с проверкой доступа к домену
   — сделано 07.11.2026, ветка `next` ✅
+- [x] **Команда fix** — `fix --domain`, `--only`, `--yes`, `--dry-run`, `--json`, `--rollback`:
+  дифф, подтверждение, бэкап, проверка конфига, reload, откат; nginx и Caddy
+  — сделано 07.11.2026, ветка `next` ✅
 
 ## Сайт
 

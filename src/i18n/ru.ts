@@ -285,6 +285,7 @@ const report = {
     '  --domain <host>     домен для проверок сайта снаружи (раздел 5)',
     '  --quiet             не печатать строку про сайт в конце отчёта',
     '  mcp                 MCP-сервер по stdio для агентов (только чтение)',
+    '  fix                 починить сайт на сервере (единственная команда, которая меняет сервер)',
     '  login               войти через браузер и сохранить токен',
     '  logout              удалить сохранённый токен',
     '  whoami [--json]     кто вошёл и какие домены открыты',
@@ -416,6 +417,100 @@ export function fixText(key: string): string {
   return fixes[key] ?? report.unknownFixKey
 }
 
+const fix = {
+  itemName: (id: string): string => {
+    if (id === 'web.headers') return 'заголовки безопасности'
+    if (id === 'web.banner') return 'версия сервера в ответах'
+    if (id === 'web.sourcemaps') return 'карты исходников'
+    if (id === 'web.ratelimit') return 'лимит запросов'
+    return id
+  },
+  alreadyManual: (name: string): string => `${name}: уже задано вручную, не трогаю`,
+  noServerBlock: (domain: string): string =>
+    `server-блок с ${domain} не найден, файл не трогаю`,
+  noServerName: 'в server-блоке нет server_name, вставить include некуда',
+  noConfD: 'в http нет include conf.d/*.conf, зону лимита некуда положить',
+  foreignFile: (path: string): string =>
+    `${path} уже есть и создан не нами, файл не трогаю`,
+  foreignSnippet: (name: string): string =>
+    `сниппет (${name}) уже есть без нашего маркера, не трогаю`,
+  snippetBlocked: 'сниппет занят чужим файлом, зону лимита не создаю',
+  caddyRatelimit: 'Caddy: лимит запросов настраивается вручную, показываю рецепт',
+  summarySnippet: 'сниппет borodatych-security.conf с директивами уровня server',
+  summaryInclude: 'include сниппета после server_name',
+  summaryRatelimit: 'зона limit_req_zone в conf.d',
+  summarySnippetCaddy: 'сниппет (borodatych-security) в Caddyfile',
+  summaryCaddy: 'сниппет и import в блоках сайта',
+  notLinux: 'fix работает только на Linux',
+  needRoot: 'нужен root: запустите через sudo',
+  domainRequired: 'укажите домен: fix --domain example.ru',
+  domainInvalid: (reason: string): string => `домен не принят: ${reason}`,
+  rollbackWithDomain: '--rollback не принимает --domain: откат берёт домен из манифеста',
+  noFixes: 'чинить нечего: охваченные проверки в порядке',
+  nothingSelected: 'не выбрано ни одной охваченной проверки',
+  auditFailed: (detail: string): string => `аудит сайта не удался: ${detail}`,
+  serverNginx: 'nginx',
+  serverCaddy: 'Caddy',
+  serverUnknown: 'автоматически не чиним: nginx или Caddy не найден',
+  serverNoDomain: (domain: string): string =>
+    `ни nginx, ни Caddy не содержат блок для ${domain}: показываю рецепты`,
+  serverAmbiguous: (domain: string): string =>
+    `домен ${domain} есть и в nginx, и в Caddy: не угадываю, показываю рецепты`,
+  planTitle: (domain: string, server: string): string =>
+    `План починки ${domain} (${server})`,
+  planEdit: (path: string): string => `  правка: ${path}`,
+  planSkip: (target: string, detail: string): string => `  пропуск: ${target} — ${detail}`,
+  planChecks: (checks: string): string => `Проверки к починке: ${checks}`,
+  diffTitle: (path: string): string => `Дифф ${path}`,
+  emptyDiff: 'изменений нет',
+  confirm: 'Применить? [y/N] ',
+  noTTY: 'нет терминала для подтверждения: повторите с --yes',
+  declined: 'Отменено, ничего не меняем',
+  dryRun: '--dry-run: показал план и вышел, ничего не меняю',
+  backupAt: (dir: string): string => `Бэкап: ${dir}`,
+  applied: 'Изменения применены, конфиг проверен, служба перезагружена',
+  validateFailed: (detail: string): string =>
+    `Конфиг не прошёл проверку, вернул файлы из бэкапа: ${detail}`,
+  reloadFailed: (detail: string): string =>
+    `Служба не перезагрузилась, вернул файлы из бэкапа: ${detail}`,
+  recheckWait: 'Жду 5 секунд и проверяю сайт снаружи заново',
+  recheckFixed: (id: string): string => `  исправлено: ${id}`,
+  recheckStill: (id: string): string => `  ещё нет: ${id}`,
+  cdnHint: 'Возможно, перед сервером кэш или CDN: обновите кэш и проверьте снова',
+  rollbackHint: (command: string): string => `Откат: ${command}`,
+  backupMissing: (path: string): string => `в бэкапе нет файла ${path}`,
+  manifestMissing: (dir: string): string => `в ${dir} нет manifest.json`,
+  rollbackDone: 'Откат выполнен, конфиг проверен, служба перезагружена',
+  rollbackValidateFailed: (detail: string): string =>
+    `После отката конфиг не прошёл проверку: ${detail}`,
+  rollbackCommand: (dir: string): string =>
+    `sudo npx @borodatych/security fix --rollback ${dir}`,
+  recipeTitle: (id: string, stack: string): string => `Рецепт ${id} (${stack})`,
+  recipeNoAuto: (id: string): string => `${id}: автоматически не чиним, показываю рецепт`,
+  recipeStep: (step: string): string => `  - ${step}`,
+  recipeConfig: (lang: string): string => `  Конфиг (${lang}):`,
+  recipeVerify: (code: string): string => `  Проверка: ${code}`,
+  recipeRisk: (risk: string): string => `  Риск: ${risk}`,
+  recipeStackCaddy: 'Caddy',
+  recipeStackGeneric: 'общий',
+  rollbackTitle: (dir: string): string => `Откат по бэкапу ${dir}`,
+  jsonApplied: (count: number): string => `файлов изменено: ${count}`,
+  helpText: [
+    'borodatych-security fix — единственная команда, которая меняет сервер',
+    '',
+    'использование: sudo borodatych-security fix --domain example.ru [параметры]',
+    '',
+    '  --domain <host>     домен, который чиним',
+    '  --only id,id        только эти проверки',
+    '  --yes               не спрашивать подтверждение',
+    '  --dry-run           показать дифф и выйти',
+    '  --json              машинный итог',
+    '  --rollback <путь>   вернуть файлы из каталога бэкапа',
+    '',
+    'охват: nginx и Caddy; web.headers, web.banner, web.sourcemaps, web.ratelimit (только nginx)',
+  ],
+}
+
 export const ru = {
   status: statusLabels,
   severity: severityLabels,
@@ -427,6 +522,7 @@ export const ru = {
   fixes,
   mcp,
   account,
+  fix,
 }
 
 export type Ru = typeof ru

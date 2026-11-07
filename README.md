@@ -3,8 +3,10 @@
 Проверка защиты сервера и сайта: что открыто наружу и чем это закрыть.
 Русский отчёт «что сломано → чем чинить», 27 проверок в 6 разделах, CLI и MCP для агентов.
 
-**Инструмент только читает.** Он ничего не меняет на сервере, не ставит пакеты и не перезапускает
-службы. Секреты (значения из `.env`, ключи, пароли) в отчёт не попадают.
+**Проверки только читают.** Они ничего не меняют на сервере, не ставят пакеты и не перезапускают
+службы. Меняет сервер ровно одна команда — [`fix`](#починка-fix): только после показа диффа и
+подтверждения, с бэкапом, проверкой конфига, откатом при сбое и командой отката.
+Секреты (значения из `.env`, ключи, пароли) в отчёт не попадают.
 
 ## Быстрый старт
 
@@ -77,6 +79,8 @@ node dist/cli.js
 | `--help`, `-h` | справка |
 | `--version`, `-v` | версия |
 | `mcp` | поднять MCP-сервер по stdio для агента |
+| `fix --domain <host>` | починить сайт на сервере: nginx или Caddy, только после диффа и подтверждения |
+| `fix --rollback <путь>` | вернуть файлы из каталога бэкапа |
 | `login` | войти через браузер и сохранить токен |
 | `logout` | удалить сохранённый токен |
 | `whoami [--json]` | кто вошёл и какие домены открыты |
@@ -87,15 +91,62 @@ node dist/cli.js
 sudo npx @borodatych/security --only ssh.auth,net.listen
 npx @borodatych/security --domain example.ru --json
 sudo npx @borodatych/security --skip web.ratelimit
+
+# починка: сначала дифф, потом подтверждение
+sudo npx @borodatych/security fix --domain example.ru --dry-run
+sudo npx @borodatych/security fix --domain example.ru --yes
 ```
+
+## Починка fix
+
+`fix` — единственная команда, которая меняет сервер. Она чинит только сайт снаружи и только то,
+что умеет делать безопасно. Остальное печатает рецептом из каталога и не трогает.
+
+| Проверка | nginx | Caddy (v2, Caddyfile) |
+|---|---|---|
+| `web.headers` | HSTS без preload, nosniff, Referrer-Policy, `X-Frame-Options: SAMEORIGIN`, CSP только в `Content-Security-Policy-Report-Only` | те же заголовки в `header {}` |
+| `web.banner` | `server_tokens off;` | `header -Server` |
+| `web.sourcemaps` | `location ~* \.map$ { return 404; }` | `@maps path *.map` + `respond 404` |
+| `web.ratelimit` | `limit_req_zone` в `conf.d` и `limit_req` в server | только рецепт |
+
+Порядок работы:
+
+1. проверяет, что запущено на Linux и от root;
+2. проверяет доступ к домену;
+3. проверяет сайт снаружи (по умолчанию без `ratelimit`: эта проверка шлёт 30 быстрых запросов);
+4. находит nginx (`nginx -T`) или Caddy (`/etc/caddy/Caddyfile`) и блок с нужным доменом;
+5. показывает единый дифф и список «что будет сделано / что пропущено»;
+6. спрашивает `Применить? [y/N]` (без TTY нужен `--yes`);
+7. кладёт бэкап в `/var/backups/borodatych-security/<ISO-время>/`, пишет атомарно, сохраняет права;
+8. проверяет конфиг (`nginx -t` / `caddy validate`) и перезагружает службу;
+9. при сбое проверки или перезагрузки возвращает **все** файлы из бэкапа и удаляет созданные;
+10. через 5 секунд перепроверяет сайт снаружи и печатает команду отката.
+
+Если перепроверка не прошла, `fix` не откатывает правки: скорее всего, перед сервером кэш или CDN.
+Подробно — [docs/manuals/fix.md](docs/manuals/fix.md).
+
+```bash
+# посмотреть план и дифф, ничего не меняя
+sudo npx @borodatych/security fix --domain example.ru --dry-run
+
+# применить только заголовки
+sudo npx @borodatych/security fix --domain example.ru --only web.headers
+
+# откатить по пути из вывода fix
+sudo npx @borodatych/security fix --rollback /var/backups/borodatych-security/2026-11-07T12:00:00.000Z
+```
+
+`fix` не трогает блок, если в нём уже есть такая же директива (`add_header`, `server_tokens`):
+скажет «уже задано вручную, не трогаю». Если конфиг не удалось разобрать однозначно, файл
+остаётся как был, а в отчёт попадает рецепт.
 
 ## Коды выхода
 
 | Код | Значение |
 |---|---|
 | 0 | дыр нет (могут быть `warn`, `skip`, `unknown`) |
-| 1 | есть хотя бы одна дыра (`fail`) |
-| 2 | ошибка CLI: неизвестный флаг или id проверки |
+| 1 | есть хотя бы одна дыра (`fail`); у `fix` — сбой применения или перепроверка не прошла |
+| 2 | ошибка CLI: неизвестный флаг или id проверки; у `fix` — нет root, домена или доступа |
 
 ## Сайт и кабинет
 
@@ -164,6 +215,7 @@ claude mcp add borodatych-security -- npx -y @borodatych/security mcp
 - [docs/functional.md](docs/functional.md) — что умеет продукт
 - [docs/roadmap.md](docs/roadmap.md) — план и сделанное
 - [docs/manuals/mcpSetup.md](docs/manuals/mcpSetup.md) — подключение MCP
+- [docs/manuals/fix.md](docs/manuals/fix.md) — починка сайта и откат
 
 ## Лицензия
 
