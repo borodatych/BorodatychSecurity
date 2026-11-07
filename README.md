@@ -77,6 +77,9 @@ node dist/cli.js
 | `--help`, `-h` | справка |
 | `--version`, `-v` | версия |
 | `mcp` | поднять MCP-сервер по stdio для агента |
+| `login` | войти через браузер и сохранить токен |
+| `logout` | удалить сохранённый токен |
+| `whoami [--json]` | кто вошёл и какие домены открыты |
 
 Примеры:
 
@@ -99,6 +102,22 @@ sudo npx @borodatych/security --skip web.ratelimit
 Сайт [security.borodatych.ru](https://security.borodatych.ru) проверяет домен снаружи — без установки.
 Пакет проверяет сервер изнутри. В кабинете на сайте — история проверок, слежение за сайтом
 и загрузка отчёта пакета (`npx @borodatych/security --json > report.json`).
+
+## Вход и платные функции
+
+Проверки сервера и сайта, `list_checks`, `explain_check` и `get_recipe` бесплатны и работают без входа.
+Починка по плану (`fix_plan`, `verify_fix` в MCP) бесплатна для трёх доменов; дальше нужен пропуск
+в кабинете на сайте.
+
+```bash
+npx @borodatych/security login    # код и ссылка, вход в браузере, токен сохраняется
+npx @borodatych/security whoami   # кто вошёл и сколько бесплатных доменов осталось
+npx @borodatych/security logout   # забыть токен
+```
+
+Токен лежит в `~/.config/borodatych-security/token` с правами `600`, каталог — `700`.
+Под `sudo` команды берут токен обычного пользователя (`SUDO_USER`), поэтому `sudo … login` не нужен.
+Для MCP токен можно передать переменной `BOROSEC_TOKEN` в окружении клиента.
 
 ## MCP: проверки для агента
 
@@ -131,6 +150,9 @@ claude mcp add borodatych-security -- npx -y @borodatych/security mcp
 | `audit_site` | проверяет сайт снаружи по домену; `ratelimit` выключен по умолчанию |
 | `explain_check` | объясняет проверку: что проверяет, что считается проблемой, чем чинить |
 | `list_checks` | список проверок: id, раздел, важность, название |
+| `fix_plan` | план починки по домену: только `fail` и `warn`, с рецептами под найденный стек (нужен доступ) |
+| `get_recipe` | рецепт по id проверки: шаги, конфиг, проверка и риски (бесплатно) |
+| `verify_fix` | одна проверка сайта после правки, `fixed=true` только при `ok` (нужен доступ) |
 
 Агент читает отчёт и предлагает правки, но применяет их только после согласия пользователя.
 Пошаговая настройка для Claude Code, VibeIDE и Cursor — [docs/manuals/mcpSetup.md](docs/manuals/mcpSetup.md).

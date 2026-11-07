@@ -25,6 +25,42 @@ sudo npx -y @borodatych/security --only ssh.auth
 
 Если эта команда работает, MCP-сервер тоже запустится: это тот же пакет с подкомандой `mcp`.
 
+## Вход и доступ к домену
+
+Проверки `audit_server`, `audit_site`, `list_checks`, `explain_check` и `get_recipe` бесплатны и
+работают без входа. `fix_plan` и `verify_fix` требуют доступа к домену: три домена бесплатно,
+дальше — пропуск в кабинете на сайте.
+
+Войти один раз в терминале:
+
+```bash
+npx -y @borodatych/security login
+npx -y @borodatych/security whoami
+```
+
+`login` покажет код и ссылку, откроет браузер (если может), дождётся подтверждения и сохранит токен
+`bsec_…` в `~/.config/borodatych-security/token` с правами `600`. `whoami` покажет email, остаток
+бесплатных доменов и сроки пропусков; `whoami --json` отдаёт то же машинно.
+
+MCP-клиент запускается от вашего пользователя и сам найдёт файл токена. Если клиент работает в
+другом окружении или файла нет, передайте токен переменной `BOROSEC_TOKEN` в конфиге:
+
+```json
+{
+  "mcpServers": {
+    "borodatych-security": {
+      "command": "npx",
+      "args": ["-y", "@borodatych/security", "mcp"],
+      "env": { "BOROSEC_TOKEN": "bsec_…" }
+    }
+  }
+}
+```
+
+Не кладите токен в репозиторий. Если доступа нет, `fix_plan` и `verify_fix` вернут текстом, что
+сделать: войти командой `login` или открыть кабинет `/my/checks` и оформить пропуск. Отозвать токен
+можно там же, в блоке «Токены для CLI и MCP».
+
 ## Шаг 2. Подключить
 
 ### Claude Code
@@ -61,7 +97,7 @@ claude mcp add --scope user borodatych-security -- npx -y @borodatych/security m
 2. Добавьте сервер вручную и укажите команду `npx`, аргументы `-y @borodatych/security mcp`.
 3. Если в настройках есть JSON-конфиг, вставьте блок из раздела «Любой клиент» ниже.
 4. Перезапустите IDE и проверьте, что в списке инструментов появились `audit_server`, `audit_site`,
-   `explain_check`, `list_checks`.
+   `explain_check`, `list_checks`, `fix_plan`, `get_recipe`, `verify_fix`.
 
 ### Cursor
 
@@ -142,6 +178,16 @@ claude mcp add --scope user borodatych-security -- npx -y @borodatych/security m
 пути, порта и без IP. Проверка лимитов запросов шлёт 30 быстрых запросов, поэтому по умолчанию
 выключена; включайте её (`ratelimit: true`) только если пользователь не против.
 
+Починка по плану:
+
+> Построй план починки для example.ru.
+
+Агент вызывает `fix_plan` и получает упорядоченный план: сначала дыры (`fail`), потом замечания
+(`warn`), внутри — по важности; у каждого шага рецепт под найденный стек. Если домен не открыт,
+инструмент вернёт текст, что сделать: войти (`login`) или оформить пропуск в кабинете. После правок
+агент вызывает `verify_fix` с id проверки и доменом и показывает `fixed: true` только тогда, когда
+проверка стала `ok`.
+
 ## Права root
 
 MCP-сервер запускается от того пользователя, от которого работает клиент. Без root проверки,
@@ -164,12 +210,17 @@ sudo npx -y @borodatych/security
 | `npx: command not found` | Node.js 20+ установлен, `npx` есть в `PATH` клиента |
 | проверки возвращают `unknown` | нет прав: запустить CLI через `sudo` для полного отчёта |
 | `audit_site` ругается на домен | передать только имя хоста: `example.ru`, без схемы, пути, порта и IP |
+| `fix_plan` или `verify_fix` просят войти | `npx -y @borodatych/security login` или `BOROSEC_TOKEN` в `env` клиента |
+| «Бесплатные домены закончились» | оформить пропуск в кабинете `/my/checks` |
 
 ## Что доступно агенту
 
-| Инструмент | Аргументы | Ответ |
-|---|---|---|
-| `audit_server` | `only?: string[]`, `skip?: string[]` | JSON-отчёт как у `--json`, все проверки кроме `web.*` |
-| `audit_site` | `domain: string`, `ratelimit?: boolean` (по умолчанию `false`) | JSON-отчёт по `web.*` |
-| `explain_check` | `id: string` | что проверяет, как, что считается проблемой, чем чинить |
-| `list_checks` | — | id, раздел, важность, название |
+| Инструмент | Аргументы | Ответ | Доступ |
+|---|---|---|---|
+| `audit_server` | `only?: string[]`, `skip?: string[]` | JSON-отчёт как у `--json`, все проверки кроме `web.*` | бесплатно |
+| `audit_site` | `domain: string`, `ratelimit?: boolean` (по умолчанию `false`) | JSON-отчёт по `web.*` | бесплатно |
+| `explain_check` | `id: string` | что проверяет, как, что считается проблемой, чем чинить | бесплатно |
+| `list_checks` | — | id, раздел, важность, название | бесплатно |
+| `get_recipe` | `checkId: string`, `stack?: string`, `domain?: string` | шаги, конфиг, команда проверки и риски | бесплатно |
+| `fix_plan` | `domain: string`, `ratelimit?: boolean` | план: только `fail` и `warn`, рецепты под найденный стек | нужен доступ к домену |
+| `verify_fix` | `checkId: string`, `domain: string` | статус одной проверки сайта, `fixed=true` только при `ok` | нужен доступ к домену |

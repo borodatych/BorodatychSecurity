@@ -1,13 +1,17 @@
+/** Все стеки, под которые бывает свой рецепт */
+export const STACKS = [
+  'nginx',
+  'caddy',
+  'apache',
+  'npm',
+  'traefik',
+  'cloudflare',
+  'express',
+  'nextjs',
+] as const
+
 /** Стек веб-сервера или приложения, под который есть свой рецепт */
-export type Stack =
-  | 'nginx'
-  | 'caddy'
-  | 'apache'
-  | 'npm'
-  | 'traefik'
-  | 'cloudflare'
-  | 'express'
-  | 'nextjs'
+export type Stack = (typeof STACKS)[number]
 
 /** Язык рецепта */
 export type RecipeLocale = 'ru' | 'en'

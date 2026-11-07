@@ -12,6 +12,36 @@ export interface CliOptions {
 
 export class CliError extends Error {}
 
+/** Команды входа и профиля: отдельные подкоманды, а не флаги отчёта */
+export const ACCOUNT_COMMANDS = ['login', 'logout', 'whoami'] as const
+export type AccountCommand = (typeof ACCOUNT_COMMANDS)[number]
+
+export interface AccountCommandOptions {
+  json: boolean
+}
+
+export function isAccountCommand(value: string | undefined): value is AccountCommand {
+  return value !== undefined && (ACCOUNT_COMMANDS as readonly string[]).includes(value)
+}
+
+/** Разбор аргументов login/logout/whoami: только --json, без позиционных */
+export function parseAccountArgs(argv: readonly string[]): AccountCommandOptions {
+  let parsed
+  try {
+    parsed = parseArgs({
+      args: [...argv],
+      strict: true,
+      allowPositionals: false,
+      options: {
+        json: { type: 'boolean', default: false },
+      },
+    })
+  } catch (error) {
+    throw new CliError(error instanceof Error ? error.message : String(error))
+  }
+  return { json: parsed.values.json }
+}
+
 function list(value: string | undefined): string[] | undefined {
   if (value === undefined) return undefined
   const items = value

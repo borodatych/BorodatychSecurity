@@ -1,5 +1,6 @@
 import { domainToASCII } from 'node:url'
 import { ru } from './i18n/ru'
+import { STACKS, type Stack } from './recipes/types'
 import type { Selection } from './run'
 
 /** Ошибка разбора аргументов инструмента MCP: текст уходит агенту как ошибка инструмента */
@@ -17,6 +18,22 @@ export interface AuditSiteArgs {
 
 export interface ExplainCheckArgs {
   id: string
+}
+
+export interface FixPlanArgs {
+  domain: string
+  ratelimit: boolean
+}
+
+export interface GetRecipeArgs {
+  checkId: string
+  stack?: Stack
+  domain?: string
+}
+
+export interface VerifyFixArgs {
+  checkId: string
+  domain: string
 }
 
 function asRecord(input: unknown): Record<string, unknown> {
@@ -64,6 +81,29 @@ export function domainProblem(value: string): string | null {
   return null
 }
 
+function requiredDomain(value: unknown): string {
+  if (typeof value !== 'string') throw new ToolInputError(ru.mcp.invalidArgument('domain'))
+  const problem = domainProblem(value)
+  if (problem !== null) throw new ToolInputError(ru.mcp.invalidDomain(problem))
+  return domainToASCII(value).toLowerCase()
+}
+
+function requiredCheckId(value: unknown): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new ToolInputError(ru.mcp.invalidId)
+  }
+  return value.trim()
+}
+
+function optionalStack(value: unknown): Stack | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !(STACKS as readonly string[]).includes(value)) {
+    const shown = typeof value === 'string' ? value : typeof value
+    throw new ToolInputError(ru.mcp.invalidStack(shown, STACKS.join(', ')))
+  }
+  return value as Stack
+}
+
 export function parseAuditServerArgs(input: unknown): AuditServerArgs {
   const record = asRecord(input)
   const only = stringList(record.only, 'only')
@@ -95,6 +135,34 @@ export function parseExplainCheckArgs(input: unknown): ExplainCheckArgs {
     throw new ToolInputError(ru.mcp.invalidId)
   }
   return { id: id.trim() }
+}
+
+export function parseFixPlanArgs(input: unknown): FixPlanArgs {
+  const record = asRecord(input)
+  const domain = requiredDomain(record.domain)
+  const ratelimit = record.ratelimit
+  if (ratelimit !== undefined && typeof ratelimit !== 'boolean') {
+    throw new ToolInputError(ru.mcp.invalidBoolean('ratelimit'))
+  }
+  return { domain, ratelimit: ratelimit === true }
+}
+
+export function parseGetRecipeArgs(input: unknown): GetRecipeArgs {
+  const record = asRecord(input)
+  const checkId = requiredCheckId(record.checkId)
+  const stack = optionalStack(record.stack)
+  const args: GetRecipeArgs = { checkId }
+  if (stack !== undefined) args.stack = stack
+  if (record.domain !== undefined) args.domain = requiredDomain(record.domain)
+  return args
+}
+
+export function parseVerifyFixArgs(input: unknown): VerifyFixArgs {
+  const record = asRecord(input)
+  return {
+    checkId: requiredCheckId(record.checkId),
+    domain: requiredDomain(record.domain),
+  }
 }
 
 /** Собрать выбор проверок без лишних undefined (exactOptionalPropertyTypes) */

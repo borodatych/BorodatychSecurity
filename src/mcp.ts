@@ -2,17 +2,75 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
-import { audit, serverChecks, siteChecks } from './audit'
+import { requireAccess, type RequireAccessOptions } from './account/require'
+import { audit, serverChecks, siteChecks, type AuditOptions } from './audit'
+import { buildFixPlan } from './fixPlan'
 import { ru } from './i18n/ru'
 import {
   parseAuditServerArgs,
   parseAuditSiteArgs,
   parseExplainCheckArgs,
+  parseFixPlanArgs,
+  parseGetRecipeArgs,
+  parseVerifyFixArgs,
   toSelection,
 } from './mcpArgs'
-import { checkInfo, knownCheckIds, listCheckInfo } from './mcpCatalog'
+import {
+  checkInfo,
+  knownCheckIds,
+  listCheckInfo,
+  toolDescriptions,
+  toolTitles,
+} from './mcpCatalog'
+import { getRecipe, pickVariant, renderRecipe } from './recipes/index'
+import type { RecipeSnippet, Stack } from './recipes/types'
 import { selectChecks } from './run'
+import type { TlsHandshakeFn } from './types'
 import { VERSION } from './version'
+
+/** Подменяемые сеть, окружение и токен: в тестах ничего реального не трогаем */
+export interface McpServerOptions {
+  fetch?: typeof fetch
+  tlsHandshake?: TlsHandshakeFn
+  env?: NodeJS.ProcessEnv
+  uid?: number | null
+  lookupUser?: (name: string) => { home: string; uid: number; gid: number } | null
+  apiBase?: string
+  token?: string | null
+}
+
+/** Домен для подстановки, когда get_recipe позвали без domain */
+const SAMPLE_DOMAIN = 'example.ru'
+
+function accessOptions(options: McpServerOptions): RequireAccessOptions {
+  const result: RequireAccessOptions = {}
+  if (options.env !== undefined) result.env = options.env
+  if (options.uid !== undefined) result.uid = options.uid
+  if (options.lookupUser !== undefined) result.lookupUser = options.lookupUser
+  if (options.fetch !== undefined) result.fetch = options.fetch
+  if (options.apiBase !== undefined) result.baseUrl = options.apiBase
+  if (options.token !== undefined) result.token = options.token
+  return result
+}
+
+function siteAuditOptions(options: McpServerOptions, domain: string): AuditOptions {
+  return {
+    domain,
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.tlsHandshake === undefined ? {} : { tlsHandshake: options.tlsHandshake }),
+  }
+}
+
+interface RecipeOutput {
+  checkId: string
+  stack: Stack | null
+  stacks: Stack[]
+  steps: string[]
+  snippet?: RecipeSnippet
+  verify: RecipeSnippet
+  risks: string[]
+  otherStacks: Stack[]
+}
 
 /** Описания инструментов для агента: по-английски, кратко, с обещанием «только чтение» */
 const descriptions = {
@@ -55,8 +113,32 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** Рецепт для get_recipe и fix_plan: выбранный стек, шаги, конфиг и другие стеки */
+function recipeOutput(
+  checkId: string,
+  stack: Stack | undefined,
+  domain: string,
+): RecipeOutput | null {
+  const recipe = getRecipe(checkId, 'ru')
+  if (recipe === null) return null
+  const rendered = renderRecipe(recipe, { domain })
+  const picked = pickVariant(rendered, stack === undefined ? [] : [stack])
+  const available = Object.keys(rendered.stacks) as Stack[]
+  const output: RecipeOutput = {
+    checkId,
+    stack: picked.stack,
+    stacks: available,
+    steps: picked.variant.steps,
+    verify: rendered.verify,
+    risks: rendered.risks,
+    otherStacks: available.filter((item) => item !== picked.stack),
+  }
+  if (picked.variant.snippet !== undefined) output.snippet = picked.variant.snippet
+  return output
+}
+
 /** MCP-сервер: те же проверки, что у CLI, и то же обещание «только чтение» */
-export function createMcpServer(): McpServer {
+export function createMcpServer(options: McpServerOptions = {}): McpServer {
   const server = new McpServer(
     { name: 'borodatych-security', version: VERSION },
     { capabilities: { tools: {} } },
@@ -143,6 +225,132 @@ export function createMcpServer(): McpServer {
       inputSchema: {},
     },
     () => jsonResult(listCheckInfo()),
+  )
+
+  server.registerTool(
+    'fix_plan',
+    {
+      title: toolTitles.fixPlan,
+      description: toolDescriptions.fixPlan,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      inputSchema: {
+        domain: z.string().describe('Bare hostname, for example example.ru. No scheme, path, port or IP.'),
+        ratelimit: z
+          .boolean()
+          .optional()
+          .describe('Also probe the rate limit (30 rapid requests). Off by default.'),
+      },
+    },
+    async (args) => {
+      let domain = ''
+      let ratelimit = false
+      try {
+        const parsed = parseFixPlanArgs(args)
+        domain = parsed.domain
+        ratelimit = parsed.ratelimit
+      } catch (error) {
+        return errorResult(messageOf(error))
+      }
+      try {
+        await requireAccess(domain, accessOptions(options))
+      } catch (error) {
+        return errorResult(messageOf(error))
+      }
+      try {
+        const selection = ratelimit ? {} : { skip: ['web.ratelimit'] }
+        const selected = selectChecks(siteChecks(), selection)
+        const report = await audit(selected, siteAuditOptions(options, domain))
+        return jsonResult(buildFixPlan(report, domain))
+      } catch (error) {
+        return errorResult(ru.mcp.auditFailed(messageOf(error)))
+      }
+    },
+  )
+
+  server.registerTool(
+    'get_recipe',
+    {
+      title: toolTitles.getRecipe,
+      description: toolDescriptions.getRecipe,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      inputSchema: {
+        checkId: z.string().describe('Check id from list_checks, for example web.headers.'),
+        stack: z
+          .string()
+          .optional()
+          .describe('nginx, caddy, apache, npm, traefik, cloudflare, express or nextjs. Omit for generic.'),
+        domain: z
+          .string()
+          .optional()
+          .describe('Optional bare hostname; only fills {domain} placeholders in the recipe.'),
+      },
+    },
+    (args) => {
+      try {
+        const parsed = parseGetRecipeArgs(args)
+        const output = recipeOutput(parsed.checkId, parsed.stack, parsed.domain ?? SAMPLE_DOMAIN)
+        if (output === null) {
+          return errorResult(ru.mcp.unknownCheck(parsed.checkId, knownCheckIds().join(', ')))
+        }
+        return jsonResult(output)
+      } catch (error) {
+        return errorResult(messageOf(error))
+      }
+    },
+  )
+
+  server.registerTool(
+    'verify_fix',
+    {
+      title: toolTitles.verifyFix,
+      description: toolDescriptions.verifyFix,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+      inputSchema: {
+        checkId: z.string().describe('Website check id from section 5, for example web.headers.'),
+        domain: z.string().describe('Bare hostname, for example example.ru. No scheme, path, port or IP.'),
+      },
+    },
+    async (args) => {
+      let domain = ''
+      let checkId = ''
+      try {
+        const parsed = parseVerifyFixArgs(args)
+        domain = parsed.domain
+        checkId = parsed.checkId
+      } catch (error) {
+        return errorResult(messageOf(error))
+      }
+      try {
+        await requireAccess(domain, accessOptions(options))
+      } catch (error) {
+        return errorResult(messageOf(error))
+      }
+
+      const info = checkInfo(checkId)
+      if (info === null) {
+        return errorResult(ru.mcp.unknownCheck(checkId, knownCheckIds().join(', ')))
+      }
+      if (info.section !== 5) return errorResult(ru.mcp.serverCheck(checkId))
+      const check = siteChecks().find((item) => item.id === checkId)
+      if (check === undefined) {
+        return errorResult(ru.mcp.unknownCheck(checkId, knownCheckIds().join(', ')))
+      }
+
+      try {
+        const report = await audit([check], siteAuditOptions(options, domain))
+        const result = report.checks[0]
+        if (result === undefined) return errorResult(ru.mcp.auditFailed(checkId))
+        return jsonResult({
+          id: result.id,
+          status: result.status,
+          severity: result.severity,
+          findings: result.findings,
+          fixed: result.status === 'ok',
+        })
+      } catch (error) {
+        return errorResult(ru.mcp.auditFailed(messageOf(error)))
+      }
+    },
   )
 
   return server

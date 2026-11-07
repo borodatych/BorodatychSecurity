@@ -198,6 +198,39 @@ const mcp = {
   invalidId: 'id: ожидается непустая строка',
   invalidArgument: (name: string): string => `${name}: неожиданный тип аргумента`,
   noArgs: 'подкоманда mcp не принимает аргументов',
+  serverCheck: (id: string): string =>
+    `серверные проверки — audit_server на самом сервере: ${id} здесь не проверяется`,
+  invalidStack: (name: string, known: string): string =>
+    `стек не принят: ${name}. Известные: ${known}`,
+}
+
+const account = {
+  loginRequired: 'Войдите: npx @borodatych/security login',
+  tokenInvalid: 'Токен отозван или неверен, войдите заново',
+  noFreeSlots: (limit: number | null, apiBase: string): string =>
+    `Бесплатные домены закончились${limit === null ? '' : ` (${limit} из ${limit})`}. Доступ на домен — в кабинете: ${apiBase}/my/checks`,
+  loginCode: (code: string): string => `Код: ${code}`,
+  loginUrl: (url: string): string => `Откройте ссылку: ${url}`,
+  loginWaiting: 'Ждём подтверждения в браузере',
+  loginDenied: 'Вход отклонён в браузере',
+  loginExpired: 'Код истёк, запустите login заново',
+  greeting: (email: string): string => `Вошли как ${email}`,
+  logoutDone: 'Токен удалён',
+  logoutNone: 'Сохранённого токена нет',
+  whoamiEmail: (email: string): string => `Вы: ${email}`,
+  whoamiFree: (left: number, limit: number): string =>
+    `Бесплатных доменов осталось: ${left} из ${limit}`,
+  whoamiAccess: 'Домены с доступом:',
+  whoamiNoAccess: 'Доменов с доступом нет',
+  whoamiFreeSite: (domain: string, since: string): string =>
+    `  - ${domain} (бесплатный слот с ${since})`,
+  whoamiPass: (domain: string, until: string): string => `  - ${domain} (пропуск до ${until})`,
+  rateLimited: (retryAfter: number | null): string =>
+    retryAfter === null
+      ? 'Сервис просит подождать: слишком много запросов'
+      : `Сервис просит подождать ${retryAfter} с: слишком много запросов`,
+  network: (detail: string): string => `Сервис недоступен: ${detail}`,
+  serverError: (status: number): string => `Сервис ответил ошибкой: HTTP ${status}`,
 }
 
 const statusLabels: Record<string, string> = {
@@ -252,6 +285,9 @@ const report = {
     '  --domain <host>     домен для проверок сайта снаружи (раздел 5)',
     '  --quiet             не печатать строку про сайт в конце отчёта',
     '  mcp                 MCP-сервер по stdio для агентов (только чтение)',
+    '  login               войти через браузер и сохранить токен',
+    '  logout              удалить сохранённый токен',
+    '  whoami [--json]     кто вошёл и какие домены открыты',
     '  --help, -h          эта справка',
     '  --version, -v       версия',
     '',
@@ -390,6 +426,7 @@ export const ru = {
   how: checksHow,
   fixes,
   mcp,
+  account,
 }
 
 export type Ru = typeof ru

@@ -151,14 +151,17 @@ describe('MCP-сервер по InMemoryTransport', () => {
     await server.close()
   })
 
-  test('tools/list: четыре инструмента с описаниями только для чтения', async () => {
+  test('tools/list: семь инструментов с описаниями только для чтения', async () => {
     await ready
     const { tools } = await client.listTools()
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       'audit_server',
       'audit_site',
       'explain_check',
+      'fix_plan',
+      'get_recipe',
       'list_checks',
+      'verify_fix',
     ])
     for (const tool of tools) {
       expect(tool.description?.length ?? 0).toBeGreaterThan(20)
