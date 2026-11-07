@@ -121,3 +121,8 @@ claude mcp add borodatych-security -- npx -y @borodatych/security mcp
 - [docs/functional.md](docs/functional.md) — что умеет продукт
 - [docs/roadmap.md](docs/roadmap.md) — план и сделанное
 - [docs/manuals/mcpSetup.md](docs/manuals/mcpSetup.md) — подключение MCP
+
+## Лицензия
+
+AGPL-3.0: пользоваться, менять и запускать у себя бесплатно
+Кто встраивает пакет в свой сетевой сервис, открывает и свои правки — или договаривается с автором о коммерческой лицензии
