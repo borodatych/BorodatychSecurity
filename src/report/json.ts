@@ -1,4 +1,5 @@
 import { fixText } from '../i18n/ru'
+import type { Stack } from '../recipes/types'
 import type { CheckReport, JsonReport, Status } from '../types'
 
 /** Стабильная схема отчёта для агентов и будущего MCP */
@@ -7,6 +8,7 @@ export function buildJsonReport(
   host: string,
   startedAt: string,
   checks: readonly CheckReport[],
+  site?: { stacks: Stack[]; csp: string | null },
 ): JsonReport {
   return {
     version,
@@ -20,6 +22,7 @@ export function buildJsonReport(
       findings: [...check.findings],
       fix: fixText(check.fix),
     })),
+    ...(site === undefined ? {} : { site }),
   }
 }
 

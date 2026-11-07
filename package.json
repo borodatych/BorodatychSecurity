@@ -16,6 +16,10 @@
     "./i18n/ru": {
       "types": "./dist/types/i18n/ru.d.ts",
       "default": "./dist/i18n/ru.js"
+    },
+    "./recipes": {
+      "types": "./dist/types/recipes/index.d.ts",
+      "default": "./dist/recipes/index.js"
     }
   },
   "bin": {
@@ -31,7 +35,7 @@
   "scripts": {
     "check": "tsc --noEmit && eslint .",
     "test": "bun test",
-    "build": "bun build src/cli.ts --target node --outfile dist/cli.js && bun build src/audit.ts src/i18n/ru.ts --target node --root src --outdir dist && tsc -p tsconfig.build.json"
+    "build": "bun build src/cli.ts --target node --outfile dist/cli.js && bun build src/audit.ts src/i18n/ru.ts src/recipes/index.ts --target node --root src --outdir dist && tsc -p tsconfig.build.json"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

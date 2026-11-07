@@ -1,3 +1,5 @@
+import type { Stack } from './recipes/types'
+
 export type Status = 'ok' | 'warn' | 'fail' | 'skip' | 'unknown'
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
@@ -80,6 +82,8 @@ export interface JsonReport {
   host: string
   startedAt: string
   checks: CheckReport[]
+  /** Стеки сайта и стартовый CSP, если проверялся домен */
+  site?: { stacks: Stack[]; csp: string | null }
 }
 
 export const STATUS_RANK: Record<Status, number> = {

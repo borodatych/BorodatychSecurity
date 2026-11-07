@@ -29,6 +29,8 @@ npx @borodatych/security --domain example.ru
 | 5. Сайт снаружи | утечки, source maps, заголовки, TLS, CORS, cookie, лимиты, версии ПО |
 | 6. Хозяйство | бэкап вне сервера, внешний мониторинг |
 
+К каждой проверке — рецепт починки: шаги, рабочий конфиг под ваш стек (nginx, Caddy, Apache, NPM, Traefik, Cloudflare, Express, Next.js) и стартовый CSP по ресурсам сайта.
+
 Подробности по каждой проверке — [docs/checks.md](docs/checks.md).
 Возможности продукта — [docs/functional.md](docs/functional.md), план — [docs/roadmap.md](docs/roadmap.md).
 

@@ -1,9 +1,13 @@
 import { hostname } from 'node:os'
 import { createCtx } from './exec'
+import { buildCsp, collectResources } from './recipes/csp'
+import { detectStack } from './recipes/detect'
+import type { Stack } from './recipes/types'
 import { checks as registry } from './registry'
 import { buildJsonReport } from './report/json'
 import { runChecks } from './run'
-import type { Check, JsonReport, TlsHandshakeFn } from './types'
+import type { Check, Ctx, JsonReport, TlsHandshakeFn } from './types'
+import { webSession } from './web/session'
 import { VERSION } from './version'
 
 /** Проверки сервера: всё, кроме раздела 5 «Сайт снаружи» */
@@ -29,6 +33,22 @@ export interface AuditOptions {
   tlsHandshake?: TlsHandshakeFn
 }
 
+/** Стеки и стартовый CSP главной страницы; ошибка сбора не роняет аудит */
+async function collectSite(ctx: Ctx): Promise<{ stacks: Stack[]; csp: string | null }> {
+  try {
+    const session = webSession(ctx)
+    if (session === null) return { stacks: [], csp: null }
+    // Сессия кэширует главную: лишнего запроса не будет, если её уже читали
+    const home = await session.get('/')
+    if (home.error !== null || home.status === 0) return { stacks: [], csp: null }
+    const stacks = detectStack(home.headers)
+    const csp = buildCsp(collectResources(home.body, `${session.origin}/`))
+    return { stacks, csp }
+  } catch {
+    return { stacks: [], csp: null }
+  }
+}
+
 /** Общий запуск проверок для CLI и MCP: только чтение, упавшая проверка — unknown */
 export async function audit(
   selected: readonly Check[],
@@ -41,5 +61,14 @@ export async function audit(
     ...(options.tlsHandshake === undefined ? {} : { tlsHandshake: options.tlsHandshake }),
   })
   const results = await runChecks(ctx, selected)
-  return buildJsonReport(VERSION, options.host ?? hostname(), ctx.now.toISOString(), results)
+  const hasSiteChecks = selected.some((check) => check.section === 5)
+  const site =
+    options.domain !== undefined && hasSiteChecks ? await collectSite(ctx) : undefined
+  return buildJsonReport(
+    VERSION,
+    options.host ?? hostname(),
+    ctx.now.toISOString(),
+    results,
+    site,
+  )
 }

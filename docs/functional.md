@@ -89,6 +89,16 @@
 - **Как:** `npx @borodatych/security`, `npm i -g @borodatych/security`, `bun run build`.
 - **Итог:** на сервере не нужен Bun — достаточно Node 20+.
 
+## 13. Рецепты починки
+
+- **Что:** к каждой из 27 проверок — подробная инструкция: шаги, готовый фрагмент конфига под стек
+  (nginx, Caddy, Apache, Nginx Proxy Manager, Traefik, Cloudflare, Express, Next.js) и команда проверки;
+  для сайта — стартовый CSP по собранным ресурсам.
+- **Как:** `@borodatych/security/recipes`: `getRecipe(id)`, `renderRecipe(recipe, { domain, csp })`,
+  `pickVariant(recipe, stacks)`; стек определяется по заголовкам через `detectStack`.
+- **Итог:** сайт, CLI и MCP берут тексты из одного источника; рецепты только описывают правки и ничего
+  не применяют.
+
 ## Позже
 
 - Сайт `security.borodatych.ru`: проверка снаружи по домену, ночное слежение, история, оповещения,
