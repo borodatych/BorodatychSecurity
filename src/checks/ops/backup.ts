@@ -39,7 +39,10 @@ async function timerCandidates(ctx: Ctx): Promise<{ candidates: Candidate[]; ava
     let activation = timer.activates[0]
     if (activation === undefined) {
       const timerUnit = await ctx.run('systemctl', ['cat', timer.unit])
-      if (timerUnit.ok) activation = parseTimerUnit(timerUnit.stdout) ?? undefined
+      if (timerUnit.ok) {
+        const parsed = parseTimerUnit(timerUnit.stdout)
+        if (parsed !== null) activation = parsed
+      }
     }
 
     let commands: string[] = []

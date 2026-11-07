@@ -13,6 +13,19 @@ export interface CheckResult {
   severity?: Severity
 }
 
+/** Рукопожатие TLS, каким его видит проверка: срок сертификата или ошибка */
+export interface TlsHandshake {
+  validTo: string | null
+  error: string | null
+}
+
+/** Подменяемое рукопожатие: сайт проводит его через защиту от SSRF */
+export type TlsHandshakeFn = (options: {
+  host: string
+  port: number
+  maxVersion?: string
+}) => Promise<TlsHandshake>
+
 export interface Ctx {
   /** Домен для проверок сайта снаружи (раздел 5) */
   domain?: string
@@ -23,6 +36,10 @@ export interface Ctx {
   read: (path: string) => Promise<string | null>
   readdir: (path: string) => Promise<string[] | null>
   statMtime: (path: string) => Promise<Date | null>
+  /** Запросы сайта снаружи; сайт подставляет fetch с защитой от SSRF */
+  fetch?: typeof fetch
+  /** Рукопожатие TLS; сайт подставляет своё с проверкой адреса */
+  tlsHandshake?: TlsHandshakeFn
 }
 
 export interface ExecOk {

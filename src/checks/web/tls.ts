@@ -1,7 +1,7 @@
 import { connect as nodeConnect } from 'node:tls'
 import { ru } from '../../i18n/ru'
 import { auditCertificate } from '../../parsers/web'
-import type { Check, Status } from '../../types'
+import type { Check, Ctx, Status } from '../../types'
 import { WEB_TIMEOUT_MS } from '../../web/session'
 import { skipped, worstStatus } from '../shared'
 import { webSkip } from './shared'
@@ -83,6 +83,25 @@ function handshake(host: string, port: number, maxVersion?: SecureVersion): Prom
   })
 }
 
+// Внешний сайт подставляет рукопожатие с проверкой адреса на момент соединения
+async function runHandshake(
+  ctx: Ctx,
+  host: string,
+  port: number,
+  maxVersion?: SecureVersion,
+): Promise<Handshake> {
+  if (ctx.tlsHandshake === undefined) return handshake(host, port, maxVersion)
+  const result = await ctx.tlsHandshake({
+    host,
+    port,
+    ...(maxVersion === undefined ? {} : { maxVersion }),
+  })
+  return {
+    cert: result.validTo === null ? null : { valid_to: result.validTo },
+    error: result.error,
+  }
+}
+
 export const webTls: Check = {
   id: 'web.tls',
   section: 5,
@@ -93,7 +112,7 @@ export const webTls: Check = {
     const target = endpoint(ctx.domain ?? '')
     if (target === null) return skipped(ru.facts.webNoDomain())
 
-    const main = await handshake(target.host, target.port)
+    const main = await runHandshake(ctx, target.host, target.port)
     if (main.error !== null || main.cert === null) {
       return {
         status: 'unknown',
@@ -126,7 +145,7 @@ export const webTls: Check = {
     }
 
     // Отказ от TLS 1.1 — хорошо; успешное рукопожатие — дыра.
-    const legacy = await handshake(target.host, target.port, 'TLSv1.1')
+    const legacy = await runHandshake(ctx, target.host, target.port, 'TLSv1.1')
     const statuses: Status[] = [cert.status]
     if (legacy.error === null) {
       findings.push(ru.facts.webLegacyTlsAccepted())

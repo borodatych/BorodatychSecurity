@@ -3,6 +3,21 @@
   "version": "0.1.0",
   "description": "Проверка защиты сервера: что открыто наружу и чем это закрыть",
   "type": "module",
+  "main": "./dist/audit.js",
+  "types": "./dist/types/audit.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/audit.d.ts",
+      "default": "./dist/audit.js"
+    },
+    "./types": {
+      "types": "./dist/types/types.d.ts"
+    },
+    "./i18n/ru": {
+      "types": "./dist/types/i18n/ru.d.ts",
+      "default": "./dist/i18n/ru.js"
+    }
+  },
   "bin": {
     "borodatych-security": "./dist/cli.js"
   },
@@ -16,7 +31,7 @@
   "scripts": {
     "check": "tsc --noEmit && eslint .",
     "test": "bun test",
-    "build": "bun build src/cli.ts --target node --outfile dist/cli.js"
+    "build": "bun build src/cli.ts --target node --outfile dist/cli.js && bun build src/audit.ts src/i18n/ru.ts --target node --root src --outdir dist && tsc -p tsconfig.build.json"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",

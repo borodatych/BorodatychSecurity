@@ -36,9 +36,9 @@ export class WebSession {
   private readonly cache = new Map<string, WebResult>()
   private readonly fetchImpl: FetchLike
 
-  constructor(domain: string, fetchImpl: FetchLike = (input, init) => fetch(input, init)) {
+  constructor(domain: string, fetchImpl?: FetchLike) {
     this.origin = originFor(domain)
-    this.fetchImpl = fetchImpl
+    this.fetchImpl = fetchImpl ?? ((input, init) => fetch(input, init))
   }
 
   get used(): number {
@@ -121,7 +121,7 @@ export function webSession(ctx: Ctx): WebSession | null {
   if (ctx.domain === undefined) return null
   const existing = sessions.get(ctx)
   if (existing !== undefined) return existing
-  const session = new WebSession(ctx.domain)
+  const session = new WebSession(ctx.domain, ctx.fetch)
   sessions.set(ctx, session)
   return session
 }

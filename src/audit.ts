@@ -3,7 +3,7 @@ import { createCtx } from './exec'
 import { checks as registry } from './registry'
 import { buildJsonReport } from './report/json'
 import { runChecks } from './run'
-import type { Check, JsonReport } from './types'
+import type { Check, JsonReport, TlsHandshakeFn } from './types'
 import { VERSION } from './version'
 
 /** Проверки сервера: всё, кроме раздела 5 «Сайт снаружи» */
@@ -23,6 +23,10 @@ export interface AuditOptions {
   host?: string
   /** Момент старта; по умолчанию текущий */
   now?: Date
+  /** Запросы сайта снаружи; по умолчанию глобальный fetch */
+  fetch?: typeof fetch
+  /** Рукопожатие TLS; по умолчанию прямое соединение node:tls */
+  tlsHandshake?: TlsHandshakeFn
 }
 
 /** Общий запуск проверок для CLI и MCP: только чтение, упавшая проверка — unknown */
@@ -33,6 +37,8 @@ export async function audit(
   const ctx = createCtx({
     ...(options.domain === undefined ? {} : { domain: options.domain }),
     ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    ...(options.tlsHandshake === undefined ? {} : { tlsHandshake: options.tlsHandshake }),
   })
   const results = await runChecks(ctx, selected)
   return buildJsonReport(VERSION, options.host ?? hostname(), ctx.now.toISOString(), results)

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { platform } from 'node:os'
-import type { Ctx, ExecErr, ExecResult } from './types'
+import type { Ctx, ExecErr, ExecResult, TlsHandshakeFn } from './types'
 
 /** Единственная точка запуска команд. Всё чтение с таймаутом, shell не используется */
 export const EXEC_TIMEOUT_MS = 10_000
@@ -79,11 +79,14 @@ export async function mtime(path: string): Promise<Date | null> {
   }
 }
 
+
 export interface CtxOptions {
   now?: Date
   domain?: string
   env?: NodeJS.ProcessEnv
   runner?: (cmd: string, args: readonly string[]) => Promise<ExecResult>
+  fetch?: typeof fetch
+  tlsHandshake?: TlsHandshakeFn
 }
 
 export function createCtx(options: CtxOptions = {}): Ctx {
@@ -99,6 +102,12 @@ export function createCtx(options: CtxOptions = {}): Ctx {
   }
   if (options.domain !== undefined) {
     ctx.domain = options.domain
+  }
+  if (options.fetch !== undefined) {
+    ctx.fetch = options.fetch
+  }
+  if (options.tlsHandshake !== undefined) {
+    ctx.tlsHandshake = options.tlsHandshake
   }
   return ctx
 }
