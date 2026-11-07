@@ -19,7 +19,7 @@
     }
   },
   "bin": {
-    "borodatych-security": "./dist/cli.js"
+    "borodatych-security": "dist/cli.js"
   },
   "files": [
     "dist",
