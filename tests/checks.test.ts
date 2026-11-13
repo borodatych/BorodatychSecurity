@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { crowdsec } from '../src/checks/antibot/crowdsec'
 import { evaluateSshPolicy } from '../src/checks/base/ssh-auth'
 import { systemdSandbox } from '../src/checks/isolation/systemd-sandbox'
 import { netFirewall } from '../src/checks/net/firewall'
 import { netListen } from '../src/checks/net/listen'
 import { opsBackup } from '../src/checks/ops/backup'
+import { opsCanary } from '../src/checks/ops/canary'
 import type { SshPolicy } from '../src/parsers/system'
 import type { Ctx, ExecResult, Status } from '../src/types'
 
@@ -34,10 +36,12 @@ interface FakeOptions {
   commands?: Record<string, ExecResult>
   files?: Record<string, string>
   dirs?: Record<string, string[]>
+  canaryPaths?: string[]
 }
 
 function fakeCtx(options: FakeOptions = {}): Ctx {
   return {
+    ...(options.canaryPaths === undefined ? {} : { canaryPaths: options.canaryPaths }),
     platform: 'linux',
     now: NOW,
     env: {},
@@ -231,5 +235,85 @@ describe('ops.backup: таймеры и cron', () => {
     const result = await opsBackup.run(ctx)
     expect(result.status).toBe('ok')
     expect(result.findings.join(' ')).toContain('восстановление не проверено')
+  })
+})
+
+describe('crowdsec: свежесть баунсеров', () => {
+  const bouncers = (rows: unknown[]): Record<string, ExecResult> => ({
+    'cscli version': ok('v1.6.4'),
+    'cscli bouncers list -o json': ok(JSON.stringify(rows)),
+    'cscli capi status': ok(misc.cscliCapiOn ?? ''),
+  })
+
+  test('живой баунсер — ok', async () => {
+    const result = await crowdsec.run(
+      fakeCtx({ commands: bouncers([{ name: 'fw', valid: true, last_pull: '2026-11-06T11:59:00Z' }]) }),
+    )
+    expect(result.status).toBe('ok')
+  })
+
+  test('баунсер молчит дольше суток — fail с высокой важностью и именем', async () => {
+    const result = await crowdsec.run(
+      fakeCtx({ commands: bouncers([{ name: 'fw', valid: true, last_pull: '2026-11-04T12:00:00Z' }]) }),
+    )
+    expect(result.status).toBe('fail')
+    expect(result.severity).toBe('high')
+    expect(result.findings.join('\n')).toContain('fw')
+  })
+
+  test('ни разу не забирал или ключ отозван — fail', async () => {
+    const result = await crowdsec.run(
+      fakeCtx({
+        commands: bouncers([
+          { name: 'never', valid: true, last_pull: '0001-01-01T00:00:00Z' },
+          { name: 'revoked', valid: false, last_pull: '2026-11-06T11:59:00Z' },
+        ]),
+      }),
+    )
+    expect(result.status).toBe('fail')
+  })
+
+  test('один живой среди мёртвых — ok, мёртвые в находках', async () => {
+    const result = await crowdsec.run(
+      fakeCtx({
+        commands: bouncers([
+          { name: 'fw', valid: true, last_pull: '2026-11-06T11:59:00Z' },
+          { name: 'old', valid: true, last_pull: '2026-10-01T00:00:00Z' },
+        ]),
+      }),
+    )
+    expect(result.status).toBe('ok')
+    expect(result.findings.join('\n')).toContain('old')
+  })
+})
+
+describe('ops.canary', () => {
+  const err = (reason: 'error' | 'denied'): ExecResult => ({ ok: false, reason, stdout: '', stderr: '', code: 1 })
+  const stat = (path: string): string => `stat -c %a %U:%G -- ${path}`
+
+  test('без путей — unknown с подсказкой', async () => {
+    const result = await opsCanary.run(fakeCtx())
+    expect(result.status).toBe('unknown')
+  })
+
+  test('приманка закрыта — ok', async () => {
+    const result = await opsCanary.run(
+      fakeCtx({ canaryPaths: ['/root/accessKeys.csv'], commands: { [stat('/root/accessKeys.csv')]: ok('600 root:root\n') } }),
+    )
+    expect(result.status).toBe('ok')
+  })
+
+  test('приманка открыта — warn', async () => {
+    const result = await opsCanary.run(
+      fakeCtx({ canaryPaths: ['/root/a.csv'], commands: { [stat('/root/a.csv')]: ok('644 root:root\n') } }),
+    )
+    expect(result.status).toBe('warn')
+  })
+
+  test('приманки нет — fail, нет прав — unknown', async () => {
+    const absent = await opsCanary.run(fakeCtx({ canaryPaths: ['/root/a.csv'], commands: { [stat('/root/a.csv')]: err('error') } }))
+    expect(absent.status).toBe('fail')
+    const denied = await opsCanary.run(fakeCtx({ canaryPaths: ['/root/a.csv'], commands: { [stat('/root/a.csv')]: err('denied') } }))
+    expect(denied.status).toBe('unknown')
   })
 })

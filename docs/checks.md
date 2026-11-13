@@ -41,7 +41,7 @@
 |---|---|---|---|---|---|
 | f2b.active | Fail2ban | `fail2ban-client status` | не стоит или нет джейла sshd; без прав — не проверить | поставить, джейл sshd | high |
 | f2b.docker | баны доходят до контейнеров | при Docker: `banaction` и цепочка DOCKER-USER | баны в INPUT, а порты контейнеров идут через FORWARD | `chain = DOCKER-USER` | high |
-| crowdsec | CrowdSec и баунсер | `cscli` версии, `cscli bouncers list`, `cscli capi status` | нет — warn; стоит без баунсера или без CAPI — fail (важность high) | поставить баунсер, подключить CAPI | low |
+| crowdsec | CrowdSec и баунсер | `cscli` версии, `cscli bouncers list -o json` (дата последнего pull), `cscli capi status` | нет — warn; нет живого баунсера (pull старше 24 ч, ни разу, ключ отозван) или нет CAPI — fail (важность high) | поставить баунсер, подключить CAPI, перезапустить застывший баунсер | low |
 
 ## 5. Сайт снаружи
 
@@ -64,3 +64,4 @@
 |---|---|---|---|---|---|
 | ops.backup | бэкап вне сервера | таймеры и cron с `pg_dump`, `restic`, `borg`, `rclone`; куда пишут | бэкапа не нашли — warn «проверьте руками»; пишут только на этот же диск — fail | бэкап на другой хост, проверить восстановление | high |
 | ops.monitor | внешний мониторинг | не проверить изнутри — всегда `unknown` с подсказкой | — | Uptime Kuma или аналог на другой машине, оповещения в Telegram | medium |
+| ops.canary | датчик проникновения | пути из `--canary`: `stat` прав и владельца, содержимое не читается; без путей — `unknown` с подсказкой | приманки нет — fail; права не 600 или владелец не root:root — warn | Canarytokens (AWS API Keys), права 600, проверить доставку писем | low |

@@ -8,6 +8,7 @@ export interface CliOptions {
   only?: string[]
   skip?: string[]
   domain?: string
+  canary?: string[]
 }
 
 export class CliError extends Error {}
@@ -65,6 +66,7 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
         only: { type: 'string' },
         skip: { type: 'string' },
         domain: { type: 'string' },
+        canary: { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
         version: { type: 'boolean', short: 'v', default: false },
       },
@@ -84,6 +86,8 @@ export function parseCliArgs(argv: readonly string[]): CliOptions {
   const skip = list(values.skip)
   if (only !== undefined) options.only = only
   if (skip !== undefined) options.skip = skip
+  const canary = list(values.canary)
+  if (canary !== undefined) options.canary = canary
   if (values.domain !== undefined && values.domain.trim().length > 0) {
     options.domain = values.domain.trim()
   }

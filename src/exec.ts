@@ -83,6 +83,7 @@ export async function mtime(path: string): Promise<Date | null> {
 export interface CtxOptions {
   now?: Date
   domain?: string
+  canaryPaths?: string[]
   env?: NodeJS.ProcessEnv
   runner?: (cmd: string, args: readonly string[]) => Promise<ExecResult>
   fetch?: typeof fetch
@@ -102,6 +103,9 @@ export function createCtx(options: CtxOptions = {}): Ctx {
   }
   if (options.domain !== undefined) {
     ctx.domain = options.domain
+  }
+  if (options.canaryPaths !== undefined) {
+    ctx.canaryPaths = options.canaryPaths
   }
   if (options.fetch !== undefined) {
     ctx.fetch = options.fetch

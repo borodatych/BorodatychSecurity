@@ -16,7 +16,8 @@ import {
   parseAptSimulateSecurity,
   parseAutoUpgrades,
   parseBackupConfig,
-  parseCscliBouncers,
+  parseCscliBouncersJson,
+  parseStatMode,
   parseCscliCapiStatus,
   parseFail2banChain,
   parseFail2banStatus,
@@ -256,10 +257,22 @@ describe('firewall, pro, apt, crowdsec, backup', () => {
   })
 
   test('crowdsec', () => {
-    expect(parseCscliBouncers(misc.cscliBouncers ?? '')).toEqual(['cs-firewall-bouncer'])
-    expect(parseCscliBouncers(misc.cscliNoBouncers ?? '')).toEqual([])
+    expect(parseCscliBouncersJson(misc.cscliBouncersJson ?? '')).toEqual([
+      { name: 'cs-firewall-bouncer', valid: true, lastPull: new Date('2026-11-06T11:59:30Z') },
+      { name: 'old-nginx', valid: true, lastPull: null },
+      { name: 'revoked', valid: false, lastPull: new Date('2026-11-06T11:00:00Z') },
+    ])
+    expect(parseCscliBouncersJson('null\n')).toEqual([])
+    expect(parseCscliBouncersJson('')).toEqual([])
+    expect(parseCscliBouncersJson('╭── таблица')).toBeNull()
     expect(parseCscliCapiStatus(misc.cscliCapiOn ?? '')).toBe(true)
     expect(parseCscliCapiStatus(misc.cscliCapiOff ?? '')).toBe(false)
+  })
+
+  test('stat прав и владельца', () => {
+    expect(parseStatMode('600 root:root\n')).toEqual({ mode: '600', owner: 'root:root' })
+    expect(parseStatMode('644 www-data:www-data')).toEqual({ mode: '644', owner: 'www-data:www-data' })
+    expect(parseStatMode('stat: cannot stat')).toBeNull()
   })
 
   test('бэкапы и удалённые адреса', () => {

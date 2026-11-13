@@ -16,6 +16,7 @@ import { netFirewall } from './checks/net/firewall'
 import { netListen } from './checks/net/listen'
 import { netNpmAdmin } from './checks/net/npm-admin'
 import { opsBackup } from './checks/ops/backup'
+import { opsCanary } from './checks/ops/canary'
 import { opsMonitor } from './checks/ops/monitor'
 import { webBanner } from './checks/web/banner'
 import { webCookies } from './checks/web/cookies'
@@ -56,4 +57,5 @@ export const checks: Check[] = [
   webBanner,
   opsBackup,
   opsMonitor,
+  opsCanary,
 ]

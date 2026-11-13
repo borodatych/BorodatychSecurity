@@ -38,6 +38,8 @@ export interface Ctx {
   read: (path: string) => Promise<string | null>
   readdir: (path: string) => Promise<string[] | null>
   statMtime: (path: string) => Promise<Date | null>
+  /** Пути файлов-приманок для проверки ops.canary */
+  canaryPaths?: string[]
   /** Запросы сайта снаружи; сайт подставляет fetch с защитой от SSRF */
   fetch?: typeof fetch
   /** Рукопожатие TLS; сайт подставляет своё с проверкой адреса */

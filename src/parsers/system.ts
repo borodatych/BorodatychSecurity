@@ -214,29 +214,38 @@ export function parseAutoUpgrades(text: string): AutoUpgradesState {
   }
 }
 
-/** Разбор `cscli bouncers list` */
-export function parseCscliBouncers(text: string): string[] {
-  if (/no bouncers/i.test(text)) return []
-  const names: string[] = []
-  for (const raw of text.split(/\r?\n/)) {
-    const line = raw.trim()
-    if (
-      line.length === 0 ||
-      line.startsWith('─') ||
-      line.startsWith('-') ||
-      line.startsWith('╭') ||
-      line.startsWith('├') ||
-      line.startsWith('╰')
-    ) {
-      continue
-    }
-    const cleaned = line.replace(/[│┃|]/g, ' ').trim()
-    if (/^name\b/i.test(cleaned)) continue
-    if (!/\b\d{1,3}(?:\.\d{1,3}){3}\b/.test(cleaned)) continue
-    const name = cleaned.split(/\s+/)[0]
-    if (name !== undefined && name.length > 0) names.push(name)
+export interface CscliBouncer {
+  name: string
+  /** false — ключ баунсера отозван */
+  valid: boolean
+  /** Последний забор решений; null — ни разу не забирал */
+  lastPull: Date | null
+}
+
+/**
+ * Разбор `cscli bouncers list -o json`
+ * Таблицу не разбираем: в ней нет года у даты, а формат колонок меняется от версии к версии
+ * Нулевая дата Go (0001-01-01) значит «ни разу не забирал»; null — вывод не JSON
+ */
+export function parseCscliBouncersJson(text: string): CscliBouncer[] | null {
+  let data: unknown
+  try {
+    data = JSON.parse(text.trim().length === 0 ? '[]' : text)
+  } catch {
+    return null
   }
-  return names
+  if (data === null) return []
+  if (!Array.isArray(data)) return null
+  const bouncers: CscliBouncer[] = []
+  for (const item of data as unknown[]) {
+    if (typeof item !== 'object' || item === null) continue
+    const row = item as Record<string, unknown>
+    if (typeof row.name !== 'string') continue
+    const raw = typeof row.last_pull === 'string' ? new Date(row.last_pull) : null
+    const lastPull = raw !== null && !Number.isNaN(raw.getTime()) && raw.getUTCFullYear() > 1 ? raw : null
+    bouncers.push({ name: row.name, valid: row.valid !== false, lastPull })
+  }
+  return bouncers
 }
 
 /** Разбор `cscli capi status` */
@@ -244,6 +253,18 @@ export function parseCscliCapiStatus(text: string): boolean | null {
   if (/not registered|not enabled|not connected|disabled/i.test(text)) return false
   if (/CAPI/i.test(text) && /(enabled|connected|ok|running|registered)/i.test(text)) return true
   return null
+}
+
+/** Права и владелец файла из `stat -c '%a %U:%G'` */
+export interface FileMode {
+  mode: string
+  owner: string
+}
+
+export function parseStatMode(text: string): FileMode | null {
+  const match = /^([0-7]{3,4})\s+(\S+:\S+)\s*$/.exec(text.trim())
+  if (match === null) return null
+  return { mode: match[1] ?? '', owner: match[2] ?? '' }
 }
 
 export interface Fail2banChain {

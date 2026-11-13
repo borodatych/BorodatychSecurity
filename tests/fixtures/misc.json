@@ -6,12 +6,11 @@
   "iptables": "-P INPUT ACCEPT\n-P FORWARD DROP\n-P OUTPUT ACCEPT\n-A INPUT -i lo -j ACCEPT\n-A INPUT -p tcp --dport 22 -j ACCEPT\n",
   "iptablesEmpty": "-P INPUT ACCEPT\n-P FORWARD ACCEPT\n-P OUTPUT ACCEPT\n",
   "nftRules": "table inet filter {\n\tchain input {\n\t\ttype filter hook input priority filter; policy drop;\n\t}\n}\n",
-  "cscliBouncers": "╭──────────────────┬─────────────┬───────┬──────────────────────────┬─────────╮\n│ Name             │ IP Address  │ Valid │ Last API pull            │ Version │\n├──────────────────┼─────────────┼───────┼──────────────────────────┼─────────┤\n│ cs-firewall-bouncer │ 127.0.0.1 │ ✔     │ 2026-11-06T10:00:00Z     │ v0.0.30 │\n╰──────────────────┴─────────────┴───────┴──────────────────────────┴─────────╯\n",
-  "cscliNoBouncers": "No bouncers registered\n",
   "cscliCapiOn": "CAPI is enabled\n",
   "cscliCapiOff": "CAPI is not registered\n",
   "backupConfig": "# m h dom mon dow command\n0 3 * * * /usr/bin/pg_dump app | gzip > /var/backups/app.sql.gz\n15 3 * * * rclone sync /srv/app remote:backup/app\n",
   "backupLocalOnly": "0 3 * * * /usr/bin/restic backup /srv/app --repo /var/backups/restic\n",
   "backupNone": "0 1 * * * /usr/bin/apt-get update\n",
-  "fakeSecretEnv": "AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE\nDATABASE_URL=postgres://app:s3cr3t@db.internal/app\n"
+  "fakeSecretEnv": "AWS_SECRET_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE\nDATABASE_URL=postgres://app:s3cr3t@db.internal/app\n",
+  "cscliBouncersJson": "[\n  {\n    \"name\": \"cs-firewall-bouncer\",\n    \"ip_address\": \"127.0.0.1\",\n    \"valid\": true,\n    \"last_pull\": \"2026-11-06T11:59:30Z\",\n    \"type\": \"crowdsec-firewall-bouncer\",\n    \"version\": \"v0.0.31\"\n  },\n  {\n    \"name\": \"old-nginx\",\n    \"ip_address\": \"\",\n    \"valid\": true,\n    \"last_pull\": \"0001-01-01T00:00:00Z\"\n  },\n  {\n    \"name\": \"revoked\",\n    \"ip_address\": \"127.0.0.1\",\n    \"valid\": false,\n    \"last_pull\": \"2026-11-06T11:00:00Z\"\n  }\n]\n"
 }

@@ -103,7 +103,7 @@ describe('explain_check и list_checks', () => {
   test('неизвестная проверка — null, известные id перечислены', () => {
     expect(checkInfo('no.such')).toBeNull()
     const ids = knownCheckIds()
-    expect(ids.length).toBe(27)
+    expect(ids.length).toBe(28)
     expect(ids).toContain('web.secrets')
   })
 
@@ -172,12 +172,12 @@ describe('MCP-сервер по InMemoryTransport', () => {
     expect(site?.description).toContain('fix only after the user agrees')
   })
 
-  test('list_checks: 27 проверок в JSON', async () => {
+  test('list_checks: 28 проверок в JSON', async () => {
     await ready
     const result = (await client.callTool({ name: 'list_checks', arguments: {} })) as CallToolResult
     expect(result.isError ?? false).toBe(false)
     const list = JSON.parse(textOf(result)) as { id: string; severity: string }[]
-    expect(list.length).toBe(27)
+    expect(list.length).toBe(28)
     expect(list.map((item) => item.id)).toContain('web.ratelimit')
   })
 

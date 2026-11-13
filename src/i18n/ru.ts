@@ -34,6 +34,7 @@ const fixes: Record<string, string> = {
   'web.banner': 'убрать версии из заголовков',
   'ops.backup': 'делать бэкап на другой хост и проверить восстановление',
   'ops.monitor': 'поставить Uptime Kuma или аналог на другой машине и оповещения в Telegram',
+  'ops.canary': 'разложить приманки Canarytokens (AWS API Keys) с правами 600 и проверить доставку писем',
 }
 
 const checks: Record<string, CheckText> = {
@@ -103,7 +104,7 @@ const checks: Record<string, CheckText> = {
   },
   crowdsec: {
     title: 'CrowdSec и баунсер',
-    problem: 'CrowdSec не стоит или стоит без баунсера либо без CAPI',
+    problem: 'CrowdSec не стоит, стоит без живого баунсера либо без CAPI',
   },
   'web.secrets': {
     title: 'утечки по известным адресам',
@@ -145,6 +146,10 @@ const checks: Record<string, CheckText> = {
     title: 'внешний мониторинг',
     problem: 'изнутри сервера не проверить, нужен взгляд снаружи',
   },
+  'ops.canary': {
+    title: 'датчик проникновения',
+    problem: 'нет приманки или она открыта: вора, который уже внутри, никто не заметит',
+  },
 }
 
 /** Колонка «как» из docs/checks.md: сверяется тестом, чтобы справка не расходилась с документом */
@@ -166,7 +171,7 @@ const checksHow: Record<string, string> = {
   'runtime.eol': 'версии `node`, `bun`, `php`, `python3`, PostgreSQL, образы в `docker ps`',
   'f2b.active': '`fail2ban-client status`',
   'f2b.docker': 'при Docker: `banaction` и цепочка DOCKER-USER',
-  crowdsec: '`cscli` версии, `cscli bouncers list`, `cscli capi status`',
+  crowdsec: '`cscli` версии, `cscli bouncers list -o json` (дата последнего pull), `cscli capi status`',
   'web.secrets':
     'GET `/.env`, `/.git/config`, `/.git/HEAD`, `/config.json`, `/.DS_Store`, `/backup.sql`, `/server-status`, `/phpinfo.php`',
   'web.sourcemaps': 'ссылки `sourceMappingURL` в JS главной и GET на них',
@@ -178,6 +183,7 @@ const checksHow: Record<string, string> = {
   'web.banner': '`Server`, `X-Powered-By`',
   'ops.backup': 'таймеры и cron с `pg_dump`, `restic`, `borg`, `rclone`; куда пишут',
   'ops.monitor': 'не проверить изнутри — всегда `unknown` с подсказкой',
+  'ops.canary': 'пути из `--canary`: `stat` прав и владельца, содержимое не читается; без путей — `unknown` с подсказкой',
 }
 
 const mcp = {
@@ -283,6 +289,7 @@ const report = {
     '  --only id,id        выполнить только эти проверки',
     '  --skip id,id        пропустить эти проверки',
     '  --domain <host>     домен для проверок сайта снаружи (раздел 5)',
+    '  --canary путь,путь  файлы-приманки для проверки ops.canary',
     '  --quiet             не печатать строку про сайт в конце отчёта',
     '  mcp                 MCP-сервер по stdio для агентов (только чтение)',
     '  fix                 починить сайт на сервере (единственная команда, которая меняет сервер)',
@@ -350,7 +357,12 @@ const facts = {
   proAttached: (): string => 'pro status: Ubuntu Pro подключён',
   livepatchOn: (): string => 'livepatch включён',
   livepatchOff: (): string => 'livepatch выключен',
-  bouncerCount: (count: number): string => `баунсеров: ${count}`,
+  bouncerAlive: (name: string, at: string): string => `баунсер ${name}: забирал решения ${at}`,
+  bouncerStale: (name: string, at: string, hours: number): string =>
+    `баунсер ${name}: последний pull ${at}, дольше ${hours} ч — решения до сетевого экрана не доходят`,
+  bouncerNeverPulled: (name: string): string => `баунсер ${name}: ни разу не забирал решения`,
+  bouncerRevoked: (name: string): string => `баунсер ${name}: ключ отозван`,
+  bouncersUnparsed: (): string => 'не удалось разобрать cscli bouncers list -o json',
   bouncersNone: (): string => 'баунсеров нет',
   capiOn: (): string => 'CAPI подключён',
   capiOff: (): string => 'CAPI не подключён',
@@ -400,6 +412,13 @@ const facts = {
   webBannerNone: (): string => 'версий в заголовках нет',
   webBannerVersion: (header: string, value: string): string => `${header}: ${value}`,
   monitorOutside: (): string => 'проверка возможна только снаружи',
+  canaryNotConfigured: (): string =>
+    'приманки не заданы (--canary <путь>): изнутри не узнать, есть ли датчик проникновения',
+  canaryAbsent: (path: string): string => `приманки ${path} нет`,
+  canaryOpen: (path: string, mode: string, owner: string): string =>
+    `приманка ${path}: права ${mode}, владелец ${owner} — нужно 600 и root:root`,
+  canaryOk: (path: string): string => `приманка ${path} на месте, права 600, root:root`,
+  canaryUnchecked: (path: string): string => `приманку ${path} не проверить: нет прав или stat`,
   domainAccepted: (domain: string): string => `домен принят для будущих проверок сайта: ${domain}`,
   noExposedPorts: (): string => 'на всех адресах только разрешённые порты',
   noContainers: (): string => 'запущенных контейнеров нет',

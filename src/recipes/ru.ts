@@ -398,7 +398,8 @@ chain = DOCKER-USER`,
       steps: [
         'Поставьте CrowdSec и подключите CAPI',
         'Поставьте баунсер, например firewall-bouncer',
-        'Проверьте, что баунсер видит решения CrowdSec',
+        'Проверьте, что баунсер видит решения CrowdSec: дата последнего pull в cscli bouncers list свежая',
+        'Если pull старый — перезапустите баунсер и посмотрите его журнал',
       ],
       snippet: {
         lang: 'bash',
@@ -410,7 +411,7 @@ sudo apt install -y crowdsec-firewall-bouncer-iptables`,
     },
     verify: {
       lang: 'bash',
-      code: 'sudo cscli bouncers list && sudo cscli capi status',
+      code: 'sudo cscli bouncers list -o json && sudo cscli capi status',
     },
     risks: ['баунсер меняет правила iptables или nftables — проверьте доступ по SSH'],
   },
@@ -463,6 +464,33 @@ restic backup /srv /etc`,
       code: 'curl -fsS http://127.0.0.1:3001 >/dev/null && echo ok',
     },
     risks: ['мониторинг на том же сервере не заметит его падение'],
+  },
+  'ops.canary': {
+    checkId: 'ops.canary',
+    stacks: {},
+    generic: {
+      steps: [
+        'На canarytokens.org создайте токен типа AWS API Keys, в memo укажите, куда положите файл',
+        'Из России сайт открывается только через прокси, а ловушки срабатывают и без него',
+        'Сначала создайте тестовый web-токен, откройте его curl и убедитесь, что письмо дошло, а не в спаме',
+        'Разложите ключи файлами туда, куда чужим лезть незачем, с правдоподобными именами',
+        'Права 600, владелец root:root; token и auth от токенов храните вне сервера',
+        'Запускайте проверку с --canary и путями приманок',
+      ],
+      snippet: {
+        lang: 'bash',
+        code: `sudo install -m 600 -o root -g root accessKeys.csv /root/accessKeys.csv
+sudo install -m 600 -o root -g root rootkey.csv /opt/docker/aws-rootkey-old.csv`,
+      },
+    },
+    verify: {
+      lang: 'bash',
+      code: 'sudo borodatych-security --only ops.canary --canary /root/accessKeys.csv,/opt/docker/aws-rootkey-old.csv',
+    },
+    risks: [
+      'срабатывает использование ключей, а не чтение файла: это датчик на вора с инструментами',
+      'датчик без проверенной доставки писем — декорация',
+    ],
   },
 
   'web.secrets': {

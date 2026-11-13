@@ -398,7 +398,8 @@ chain = DOCKER-USER`,
       steps: [
         'Install CrowdSec and register with CAPI',
         'Install a bouncer such as firewall-bouncer',
-        'Check that the bouncer sees CrowdSec decisions',
+        'Check that the bouncer sees CrowdSec decisions: the last pull date in cscli bouncers list is fresh',
+        'If the last pull is old, restart the bouncer and read its log',
       ],
       snippet: {
         lang: 'bash',
@@ -410,7 +411,7 @@ sudo apt install -y crowdsec-firewall-bouncer-iptables`,
     },
     verify: {
       lang: 'bash',
-      code: 'sudo cscli bouncers list && sudo cscli capi status',
+      code: 'sudo cscli bouncers list -o json && sudo cscli capi status',
     },
     risks: ['the bouncer changes iptables or nftables rules, check SSH access'],
   },
@@ -463,6 +464,33 @@ restic backup /srv /etc`,
       code: 'curl -fsS http://127.0.0.1:3001 >/dev/null && echo ok',
     },
     risks: ['monitoring on the same server will not notice its failure'],
+  },
+  'ops.canary': {
+    checkId: 'ops.canary',
+    stacks: {},
+    generic: {
+      steps: [
+        'On canarytokens.org create an AWS API Keys token, put where the file will live into the memo',
+        'From Russia the site opens only through a proxy, while the traps fire without one',
+        'First create a test web token, open it with curl and make sure the email arrives and is not in spam',
+        'Place the keys as files where nobody has a reason to look, with believable names',
+        'Mode 600, owner root:root; keep the token and auth of each token off the server',
+        'Run the check with --canary and the bait paths',
+      ],
+      snippet: {
+        lang: 'bash',
+        code: `sudo install -m 600 -o root -g root accessKeys.csv /root/accessKeys.csv
+sudo install -m 600 -o root -g root rootkey.csv /opt/docker/aws-rootkey-old.csv`,
+      },
+    },
+    verify: {
+      lang: 'bash',
+      code: 'sudo borodatych-security --only ops.canary --canary /root/accessKeys.csv,/opt/docker/aws-rootkey-old.csv',
+    },
+    risks: [
+      'using the keys fires the trap, reading the file does not: this detects a thief with tools',
+      'a detector without verified email delivery is decoration',
+    ],
   },
 
   'web.secrets': {

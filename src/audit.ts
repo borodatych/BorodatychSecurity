@@ -23,6 +23,8 @@ export function siteChecks(): Check[] {
 export interface AuditOptions {
   /** Домен для проверок раздела 5 */
   domain?: string
+  /** Пути файлов-приманок для проверки ops.canary */
+  canaryPaths?: string[]
   /** Имя хоста в отчёте; по умолчанию системное */
   host?: string
   /** Момент старта; по умолчанию текущий */
@@ -56,6 +58,7 @@ export async function audit(
 ): Promise<JsonReport> {
   const ctx = createCtx({
     ...(options.domain === undefined ? {} : { domain: options.domain }),
+    ...(options.canaryPaths === undefined ? {} : { canaryPaths: options.canaryPaths }),
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
     ...(options.tlsHandshake === undefined ? {} : { tlsHandshake: options.tlsHandshake }),

@@ -176,10 +176,10 @@ export async function main(argv: readonly string[]): Promise<number | null> {
 
   try {
     const selected = selectChecks(registry, options)
-    const report = await audit(
-      selected,
-      options.domain === undefined ? {} : { domain: options.domain },
-    )
+    const report = await audit(selected, {
+      ...(options.domain === undefined ? {} : { domain: options.domain }),
+      ...(options.canary === undefined ? {} : { canaryPaths: options.canary }),
+    })
 
     if (options.json) {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
